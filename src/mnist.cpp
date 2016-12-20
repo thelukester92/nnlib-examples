@@ -5,35 +5,37 @@ using namespace nnlib;
 
 int main()
 {
+	Timer<> t;
+	
 	// Load the data
 	
 	cout << "Loading data... " << flush;
+	t.reset();
 	
 	auto train	= Loader<>::loadArff("data/mnist_train.arff");
 	auto test	= Loader<>::loadArff("data/mnist_test.arff");
 	
-	cout << "Done!" << endl;
+	cout << "Done! Loaded " << train.rows() << " training samples and " << test.rows() << " testing samples in " << t.elapsed() << " seconds." << endl;
 	
 	// Preprocess the data
 	
 	cout << "Preprocessing data... " << flush;
+	t.reset();
 	
 	auto trainFeat	= train.block(0, 0, train.rows(), train.cols() - 1);
-	auto trainLab	= Matrix<>(train.rows(), 10, 0);
+	auto trainLab	= OneHot<>(10, train.rows()).forward(train.block(0, train.cols() - 1, train.rows(), 1));
 	trainFeat.scale(1.0 / 255.0);
 	
 	auto testFeat	= test.block(0, 0, test.rows(), test.cols() - 1);
 	auto testLab	= OneHot<>(10, test.rows()).forward(test.block(0, test.cols() - 1, test.rows(), 1));
 	testFeat.scale(1.0 / 255.0);
 	
-	for(size_t i = 0; i < trainLab.rows(); ++i)
-		trainLab(i, train[i].back()) = 1;
-	
-	cout << "Done!" << endl;
+	cout << "Done in " << t.elapsed() << " seconds." << endl;
 	
 	// Prepare the network and optimizer
 	
 	cout << "Preparing network and optimizer... " << flush;
+	t.reset();
 	
 	Sequential<> nn;
 	nn.add(
@@ -45,7 +47,7 @@ int main()
 	SSE<> critic(10);
 	auto optimizer = MakeOptimizer<RMSProp>(nn, critic);
 	
-	cout << "Done!" << endl;
+	cout << "Done in " << t.elapsed() << " seconds." << endl;
 	
 	// Train
 	
@@ -61,6 +63,8 @@ int main()
 	nn.batch(batchSize);
 	critic.batch(batchSize);
 	
+	t.reset();
+	
 	for(size_t i = 0; i < epochs; ++i)
 	{
 		for(size_t j = 0; j < batchesPerEpoch; ++j)
@@ -73,11 +77,13 @@ int main()
 	}
 	Progress::display(epochs, epochs, '\n');
 	
+	double elapsed = t.elapsed();
+	
 	nn.batch(testFeat.rows());
 	critic.batch(testFeat.rows());
 	cout << "Final SSE: " << critic.forward(nn.forward(testFeat), testLab).sum() << endl;
 	
-	cout << "Done!" << endl;
+	cout << "Done in " << elapsed << " seconds." << endl;
 	
 	return 0;
 }
