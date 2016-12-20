@@ -23,14 +23,11 @@ int main()
 	trainFeat.scale(1.0 / 255.0);
 	
 	auto testFeat	= test.block(0, 0, test.rows(), test.cols() - 1);
-	auto testLab	= Matrix<>(test.rows(), 10, 0);
+	auto testLab	= OneHot<>(10, test.rows()).forward(test.block(0, test.cols() - 1, test.rows(), 1));
 	testFeat.scale(1.0 / 255.0);
 	
 	for(size_t i = 0; i < trainLab.rows(); ++i)
-		trainLab[train[i].back()] = 1;
-	
-	for(size_t i = 0; i < testLab.rows(); ++i)
-		testLab[test[i].back()] = 1;
+		trainLab(i, train[i].back()) = 1;
 	
 	cout << "Done!" << endl;
 	
@@ -59,7 +56,7 @@ int main()
 	cout << "Initial SSE: " << critic.forward(nn.forward(testFeat), testLab).sum() << endl;
 	
 	size_t epochs = 50, batchesPerEpoch = 100;
-	size_t batchSize = 10;
+	size_t batchSize = 25;
 	Batcher<> batcher(trainFeat, trainLab, batchSize);
 	nn.batch(batchSize);
 	critic.batch(batchSize);
