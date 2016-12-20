@@ -23,10 +23,14 @@ mnist: $(BIN) $(BIN)/mnist
 $(BIN)/mnist: mnist.cpp
 	$(CXX) mnist.cpp $(CFLAGS_OPT) $(LFLAGS_OPT) -o $@
 
+mnist_dbg: $(BIN) $(BIN)/mnist_dbg
+$(BIN)/mnist_dbg: mnist.cpp
+	$(CXX) mnist.cpp $(CFLAGS_DBG) $(LFLAGS_DBG) -o $@
+
 clean:
 	rm -rf $(BIN)/*
 
 $(BIN):
 	mkdir -p $@
 
-.PHONY: clean mnist
+.PHONY: clean mnist mnist_dbg
