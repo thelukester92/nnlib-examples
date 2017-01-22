@@ -3,6 +3,21 @@
 using namespace std;
 using namespace nnlib;
 
+template <typename T = double>
+Matrix<T> oneHot(const Matrix<T> &m, size_t outs)
+{
+	NNAssert(m.cols() == 1, "Can only one-hot a single-column matrix!");
+	Matrix<T> out(m.rows(), outs, 0.0);
+	for(size_t i = 0; i < m.rows(); ++i)
+	{
+		size_t closest = 0;
+		for(size_t j = 1; j < outs; ++j)
+			closest = fabs(m(i, 0) - j) > fabs(m(i, 0) - closest) ? j : closest;
+		out(i, closest) = 1.0;
+	}
+	return out;
+}
+
 int main()
 {
 	Timer<> t;
@@ -23,11 +38,11 @@ int main()
 	t.reset();
 	
 	auto trainFeat	= train.block(0, 0, train.rows(), train.cols() - 1);
-	auto trainLab	= OneHot<>(10, train.rows()).forward(train.block(0, train.cols() - 1, train.rows(), 1));
+	auto trainLab	= oneHot<>(train.block(0, train.cols() - 1, train.rows(), 1), 10);
 	trainFeat.scale(1.0 / 255.0);
 	
 	auto testFeat	= test.block(0, 0, test.rows(), test.cols() - 1);
-	auto testLab	= OneHot<>(10, test.rows()).forward(test.block(0, test.cols() - 1, test.rows(), 1));
+	auto testLab	= oneHot<>(test.block(0, test.cols() - 1, test.rows(), 1), 10);
 	testFeat.scale(1.0 / 255.0);
 	
 	cout << "Done in " << t.elapsed() << " seconds." << endl;
