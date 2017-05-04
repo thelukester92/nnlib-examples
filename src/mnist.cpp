@@ -3,6 +3,27 @@
 using namespace std;
 using namespace nnlib;
 
+size_t countMisclassifications(Module<> &model, const Tensor<> &feat, const Tensor<> &lab)
+{
+	model.batch(feat.size(0));
+	model.forward(feat);
+	
+	size_t misclassifications = 0;
+	for(size_t i = 0; i < feat.size(0); ++i)
+	{
+		size_t max = 0;
+		for(size_t j = 1; j < model.output().size(1); ++j)
+		{
+			if(model.output()(i, j) > model.output()(i, max))
+				max = j;
+		}
+		if(max != (size_t) lab(i, 0))
+			++misclassifications;
+	}
+	
+	return misclassifications;
+}
+
 int main()
 {
 	cout << "===== Training on MNIST =====" << endl;
@@ -31,6 +52,7 @@ int main()
 	nn.batch(testFeat.size(0));
 	critic.batch(testLab.size(0));
 	cout << "Initial error: " << critic.forward(nn.forward(testFeat), testLab) << endl;
+	cout << "Initial miss:  " << countMisclassifications(nn, testFeat, testLab) << endl;
 	cout << "Training..." << endl;
 	
 	Batcher<> batcher(trainFeat, trainLab, 100);
@@ -45,13 +67,6 @@ int main()
 		do
 		{
 			Progress<>::display(k++, tot);
-			
-			nn.batch(testFeat.size(0));
-			critic.batch(testLab.size(0));
-			cout << "\t" << critic.forward(nn.forward(testFeat), testLab) << flush;
-			nn.batch(batcher.batch());
-			critic.batch(batcher.batch());
-			
 			optimizer.step(batcher.features(), batcher.labels());
 		}
 		while(batcher.next());
@@ -61,6 +76,7 @@ int main()
 	nn.batch(testFeat.size(0));
 	critic.batch(testLab.size(0));
 	cout << "Final error: " << critic.forward(nn.forward(testFeat), testLab) << endl;
+	cout << "Final miss:  " << countMisclassifications(nn, testFeat, testLab) << endl;
 	
 	return 0;
 }
