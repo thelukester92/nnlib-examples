@@ -1,4 +1,5 @@
 #include <iostream>
+#include <iomanip>
 #include <nnlib.h>
 using namespace std;
 using namespace nnlib;
@@ -26,6 +27,8 @@ size_t countMisclassifications(Module<> &model, const Tensor<> &feat, const Tens
 
 int main()
 {
+	RandomEngine::seed(0);
+	
 	cout << "===== Training on MNIST =====" << endl;
 	cout << "Setting up..." << endl;
 	
@@ -75,6 +78,7 @@ int main()
 	
 	nn.batch(testFeat.size(0));
 	critic.batch(testLab.size(0));
+	cout << setprecision(5) << fixed;
 	cout << "Final error: " << critic.forward(nn.forward(testFeat), testLab) << endl;
 	cout << "Final miss:  " << countMisclassifications(nn, testFeat, testLab) << endl;
 	

@@ -18,21 +18,29 @@ LFLAGS_DBG:=$(LFLAGS)
 
 DBG_OUT:=$(OUT)_dbg
 
-all: mnist
-dbg: mnist_dbg
+opt: airline mnist
+dbg: airline_dbg mnist_dbg
 
 clean:
 	rm -rf $(BIN)/*
 
+airline: $(BIN) $(BIN)/airline
+$(BIN)/airline: airline.cpp
+	$(CXX) $< $(CFLAGS_OPT) $(LFLAGS_OPT) -o $@
+
+airline_dbg: $(BIN) $(BIN)/airline_dbg
+$(BIN)/airline_dbg: airline.cpp
+	$(CXX) $< $(CFLAGS_DBG) $(LFLAGS_DBG) -o $@
+
 mnist: $(BIN) $(BIN)/mnist
 $(BIN)/mnist: mnist.cpp
-	$(CXX) mnist.cpp $(CFLAGS_OPT) $(LFLAGS_OPT) -o $@
+	$(CXX) $< $(CFLAGS_OPT) $(LFLAGS_OPT) -o $@
 
 mnist_dbg: $(BIN) $(BIN)/mnist_dbg
 $(BIN)/mnist_dbg: mnist.cpp
-	$(CXX) mnist.cpp $(CFLAGS_DBG) $(LFLAGS_DBG) -o $@
+	$(CXX) $< $(CFLAGS_DBG) $(LFLAGS_DBG) -o $@
 
 $(BIN):
 	mkdir -p $@
 
-.PHONY: all dbg clean mnist mnist_dbg
+.PHONY: opt dbg clean airline airline_dbg mnist mnist_dbg
