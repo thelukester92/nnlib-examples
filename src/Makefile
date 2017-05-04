@@ -6,9 +6,8 @@ UNAME:=$(shell uname -s)
 
 ifeq ($(UNAME),Darwin)
 	LFLAGS+=-framework Accelerate
-	CFLAGS+=-DAPPLE
 else
-	LFLAGS+=-lblas -llapack
+	LFLAGS+=-L/usr/local/lib -lopenblas -lpthread
 endif
 
 CFLAGS_OPT:=$(CFLAGS) -O3 -DOPTIMIZE

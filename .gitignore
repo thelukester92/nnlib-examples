@@ -1,2 +1,3 @@
 bin/
 *.arff
+.DS_Store
