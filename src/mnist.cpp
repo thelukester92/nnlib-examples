@@ -30,7 +30,7 @@ int main()
 	
 	nn.batch(testFeat.size(0));
 	critic.batch(testLab.size(0));
-	cout << "Initial error: " << critic.forward(nn.forward(testLab), testLab) << endl;
+	cout << "Initial error: " << critic.forward(nn.forward(testFeat), testLab) << endl;
 	cout << "Training..." << endl;
 	
 	Batcher<> batcher(trainFeat, trainLab, 100);
