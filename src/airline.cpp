@@ -24,56 +24,58 @@ int main()
 	Tensor<double> trainFeat = train.sub({ { 0, trainLength - 1 }, {} });
 	Tensor<double> trainLab = train.sub({ { 1, trainLength - 1 }, {} });
 	
-	Tensor<double> testFeat = test.sub({ { 0, testLength - 1 }, {} });
-	Tensor<double> testLab = test.sub({ { 1, testLength - 1 }, {} });
+	Tensor<double> testFeat = test.sub({ { 0, testLength - 1 }, {} }).resize(testLength - 1, 1, 1);
+	Tensor<double> testLab = test.sub({ { 1, testLength - 1 }, {} }).resize(testLength - 1, 1, 1);
 	
-	Sequential<> nn(
-		new Linear<>(1, 10), new TanH<>(),
-		new Linear<>(10), new TanH<>(),
-		new Linear<>(1)
+	size_t seqLen = 10;
+	size_t bats = 10;
+	
+	Sequencer<> nn(
+		new Sequential<>(
+			new Linear<>(1, 10), new TanH<>(),
+			new Linear<>(10), new TanH<>(),
+			new Linear<>(1)
+		),
+		seqLen
 	);
 	MSE<> critic(nn);
 	auto optimizer = makeOptimizer<RMSProp>(nn, critic).learningRate(0.001);
 	
-	nn.batch(testFeat.size(0));
-	critic.batch(testLab.size(0));
+	nn.seqLen(testFeat.size(0));
+	nn.batch(1);
+	critic.inputs(nn.outputs());
+	cout << setprecision(5) << fixed;
 	cout << "Initial error: " << critic.forward(nn.forward(testFeat), testLab) << endl;
+	
 	cout << "Training..." << endl;
 	
-	Batcher<> batcher(trainFeat, trainLab, 10, true);
+	SequenceBatcher<> batcher(trainFeat, trainLab, seqLen, bats);
+	nn.seqLen(batcher.seqLen());
 	nn.batch(batcher.batch());
-	critic.batch(batcher.batch());
+	critic.inputs(nn.outputs());
 	
-	size_t epochs = 100;
-	size_t k = 0, tot = epochs * batcher.batches();
+	size_t epochs = 1000;
 	for(size_t i = 0; i < epochs; ++i)
 	{
 		batcher.reset();
-		do
-		{
-			Progress<>::display(k++, tot);
-			optimizer.step(batcher.features(), batcher.labels());
-		}
-		while(batcher.next());
+		Progress<>::display(i, epochs);
+		optimizer.step(batcher.features(), batcher.labels());
 	}
-	Progress<>::display(tot, tot, '\n');
+	Progress<>::display(epochs, epochs, '\n');
 	
-	nn.batch(testFeat.size(0));
-	critic.batch(testLab.size(0));
+	nn.seqLen(testFeat.size(0));
+	nn.batch(1);
+	critic.inputs(nn.outputs());
 	cout << setprecision(5) << fixed;
 	cout << "Final error: " << critic.forward(nn.forward(testFeat), testLab) << endl;
 	
-	Tensor<> fullResult(series.size(), 1);
-	fullResult.concat(
-		0,
-		train,
-		testFeat.narrow(0, 0, 1),
-		nn.forward(testFeat)
-	);
-	fullResult.scale(max - min).shift(min);
-	fullResult.sub({ { 0, train.size(0) }, {} }).fill(File<>::unknown);
+	Tensor<> narrowed = testFeat.narrow(0, 0, 1);
+	Tensor<> result = Tensor<>::flatten({ &train, &narrowed, &nn.forward(testFeat) });
+	result.scale(max - min).shift(min);
+	result.narrow(0, 0, train.size(0)).fill(File<>::unknown);
+	result.resize(result.size(0), 1);
 	
-	File<>::saveArff(fullResult, "pred.arff");
+	File<>::saveArff(result, "pred.arff");
 	
 	return 0;
 }
