@@ -4,82 +4,27 @@
 using namespace std;
 using namespace nnlib;
 
+Tensor<> extrapolate(Sequencer<> &model, const Tensor<> &context, size_t length)
+{
+	model.forget();
+	model.seqLen(1);
+	
+	for(size_t i = 0; i < context.size(0); ++i)
+	{
+		model.forward(context.narrow(0, i));
+	}
+	
+	Tensor<> result(length, 1, 1);
+	for(size_t i = 0; i < length; ++i)
+	{
+		result.narrow(0, i).copy(model.forward(model.output()));
+	}
+	
+	return result.resize(result.size(0), 1);
+}
+
 int main()
 {
-	LSTM<> nn(1, 1);
-	Tensor<> params = Tensor<>::flatten(nn.parameters());
-	
-	params.copy({
-		// input gate
-		0.2,	0,
-		-0.1,	0,
-		0.25,	0,
-		
-		// forget gate
-		-0.2,	0,
-		0.5,	0,
-		1.0,	0,
-		
-		// input module
-		0.1,	0,
-		0.2,	0,
-		
-		// output gate
-		0.5,	0,
-		0.1,	0,
-		0.3,	0
-	});
-	
-	Tensor<> sequence = { 8, 6, 7, 5, 3, 0, 9, 1, 2, 4 };
-	sequence.resize(sequence.size(0), 1, 1);
-	
-	Tensor<> state = Tensor<>::flatten(nn.innerState());
-	Tensor<> states(sequence.size(0), state.size(0));
-	
-	for(size_t i = 0; i < sequence.size(0); ++i)
-	{
-		nn.forward(sequence.select(0, i));
-		states.select(0, i).copy(state);
-		
-		/*
-		cout << nn.m_inpGate->output() << endl;
-		cout << nn.m_fgtGate->output() << endl;
-		cout << nn.m_inpMod->output() << endl;
-		cout << nn.m_state << endl;
-		cout << nn.m_outGate->output() << endl;
-		cout << nn.output() << endl;
-		cout << endl;
-		*/
-		
-		if(i == 2)
-			break;
-	}
-	
-	for(size_t i = 3; i > 0; --i)
-	{
-		state.copy(states.select(0, i - 1));
-		
-		Tensor<> grad = Tensor<>({ nn.output()(0, 0) - sequence(i, 0, 0) }).resize(1, 1);
-		nn.backward(sequence.select(0, i - 1), grad);
-		
-		cout << nn.output() << endl;
-		cout << grad << endl;
-		cout << nn.m_outMod->inGrad() << endl;
-		cout << nn.m_outGate->inGrad() << endl;
-		cout << nn.m_curStateGrad << endl;
-		cout << nn.m_inpMod->inGrad() << endl;
-		cout << nn.m_inpGate->inGrad() << endl;
-		cout << nn.m_fgtGate->inGrad() << endl;
-		cout << nn.inGrad() << endl;
-		cout << nn.m_outGrad << endl;
-		cout << nn.m_stateGrad << endl;
-		cout << endl;
-		
-		if(i-1 == 1)
-			break;
-	}
-	
-	/*
 	RandomEngine::seed(0);
 	
 	cout << "===== Training on Airline =====" << endl;
@@ -95,12 +40,6 @@ int main()
 	Tensor<double> train = series.sub({ { 0, trainLength }, {} });
 	Tensor<double> test = series.sub({ { trainLength - 1, testLength }, {} });
 	
-	train = series;
-	trainLength = train.size(0);
-	
-	test = series;
-	testLength = test.size(0);
-	
 	Tensor<double> trainFeat = train.sub({ { 0, trainLength - 1 }, {} });
 	Tensor<double> trainLab = train.sub({ { 1, trainLength - 1 }, {} });
 	
@@ -112,14 +51,15 @@ int main()
 	
 	Sequencer<> nn(
 		new Sequential<>(
-			new Linear<>(1, 10), new TanH<>(),
-			new LSTM<>(10),
+			new LSTM<>(1, 50),
+			new LSTM<>(50),
+			new LSTM<>(50),
 			new Linear<>(1)
 		),
 		seqLen
 	);
 	MSE<> critic(nn);
-	auto optimizer = makeOptimizer<RMSProp>(nn, critic).learningRate(0.001);
+	auto optimizer = makeOptimizer<SGD>(nn, critic).learningRate(0.1);
 	
 	nn.seqLen(testFeat.size(0));
 	nn.batch(1);
@@ -129,6 +69,33 @@ int main()
 	
 	cout << "Training..." << endl;
 	
+	nn.seqLen(series.size(0) - 1);
+	nn.batch(1);
+	critic.inputs(nn.outputs());
+	
+	Tensor<> fromSeries = series.sub({ { 0, series.size(0) - 1 }, {} }).resize(series.size(0) - 1, 1, 1);
+	Tensor<> toSeries = series.sub({ { 1, series.size(0) - 1 }, {} }).resize(series.size(0) - 1, 1, 1);
+	
+	size_t epochs = 200;
+	for(size_t i = 0; i < epochs; ++i)
+	{
+		nn.forget();
+		optimizer.step(fromSeries, toSeries);
+		optimizer.learningRate(optimizer.learningRate() * 0.999);
+		Progress<>::display(i, epochs);
+	}
+	Progress<>::display(epochs, epochs, '\n');
+	cout << setprecision(5) << critic.forward(nn.forward(fromSeries), toSeries) << endl;
+	
+	Tensor<> preds = extrapolate(nn, series.narrow(0, 0, trainLength), testLength);
+	Tensor<> seriesAndPreds = Tensor<>::flatten({ &trainFeat, &preds })
+		.resize(series.size(0), 1)
+		.scale(max - min)
+		.shift(min);
+	
+	File<>::saveArff(seriesAndPreds, "pred.arff");
+	
+	/*
 	SequenceBatcher<> batcher(trainFeat, trainLab, seqLen, bats);
 	nn.seqLen(batcher.seqLen());
 	nn.batch(batcher.batch());
