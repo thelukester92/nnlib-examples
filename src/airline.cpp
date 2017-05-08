@@ -35,10 +35,10 @@ int main()
 	// Metaparameters
 	
 	size_t sequenceLength = 50;
-	size_t bats = 1;
+	size_t bats = 10;
 	size_t epochs = 1000;
 	double validationPart = 0.33;
-	double learningRate = 0.01;
+	double learningRate = 0.01 / bats;
 	
 	// Bootstrap
 	
@@ -90,14 +90,57 @@ int main()
 	
 	SequenceBatcher<> batcher(trainFeat, trainLab, sequenceLength, bats);
 	
+	// nn.batch(1);
+	// critic.inputs(nn.outputs());
+	
 	cout << "Training..." << endl;
 	for(size_t i = 0; i < epochs; ++i)
 	{
 		batcher.reset();
 		
+		// optimizer.step(batcher.features(), batcher.labels());
+		
+		/*
+		for(size_t k = 0; k < bats; ++k)
+		{
+			optimizer.step(batcher.features().narrow(1, k), batcher.features().narrow(1, k));
+		}
+		*/
+		
+		Tensor<> inps(nn.inputs(), true);
+		Tensor<> outs(nn.outputs(), true);
+		Tensor<> grads(optimizer.grads().shape(), true);
+		grads.fill(0);
+		
+		nn.batch(1);
+		critic.inputs(nn.outputs());
+		
+		for(size_t k = 0; k < bats; ++k)
+		{
+			optimizer.grads().fill(0);
+			nn.forward(batcher.features().narrow(1, k));
+			critic.backward(nn.output(), batcher.labels().narrow(1, k));
+			nn.backward(batcher.features().narrow(1, k), critic.inGrad());
+			grads.addVV(optimizer.grads());
+		}
+		
+		nn.batch(bats);
+		critic.inputs(nn.outputs());
+		
+		optimizer.grads().fill(0);
+		nn.forward(batcher.features());
+		critic.backward(nn.output(), batcher.labels());
+		nn.backward(batcher.features(), critic.inGrad());
+		
+		cout << setprecision(10);
+		cout << MSE<>(grads.shape()).forward(grads, optimizer.grads()) * grads.size() << endl;
+		return 0;
+		
+		/*
 		nn.forget();
 		optimizer.step(batcher.features(), batcher.labels());
 		optimizer.learningRate(optimizer.learningRate() * (1.0 - 1e-6));
+		*/
 		
 		Progress<>::display(i, epochs);
 	}
