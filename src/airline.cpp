@@ -53,7 +53,6 @@ int main()
 		new Sequential<>(
 			new LSTM<>(1, 50),
 			new LSTM<>(50),
-			new LSTM<>(50),
 			new Linear<>(1)
 		),
 		seqLen
@@ -94,50 +93,6 @@ int main()
 		.shift(min);
 	
 	File<>::saveArff(seriesAndPreds, "pred.arff");
-	
-	/*
-	SequenceBatcher<> batcher(trainFeat, trainLab, seqLen, bats);
-	nn.seqLen(batcher.seqLen());
-	nn.batch(batcher.batch());
-	critic.inputs(nn.outputs());
-	
-	size_t epochs = 10000;
-	for(size_t i = 0; i < epochs; ++i)
-	{
-		nn.seqLen(trainFeat.size(0));
-		nn.batch(1);
-		nn.forget();
-		//nn.forward(trainFeat);
-		nn.seqLen(testFeat.size(0));
-		critic.inputs(nn.outputs());
-		cout << setprecision(5) << fixed;
-		cout << "Final error: " << critic.forward(nn.forward(testFeat), testLab) << endl;
-		nn.seqLen(batcher.seqLen());
-		nn.batch(batcher.batch());
-		critic.inputs(nn.outputs());
-		
-		batcher.reset();
-		// Progress<>::display(i, epochs);
-		nn.forget();
-		optimizer.step(batcher.features(), batcher.labels());
-	}
-	Progress<>::display(epochs, epochs, '\n');
-	
-	nn.seqLen(trainFeat.size(0));
-	nn.batch(1);
-	nn.forget();
-	//nn.forward(trainFeat);
-	nn.seqLen(testFeat.size(0));
-	critic.inputs(nn.outputs());
-	cout << setprecision(5) << fixed;
-	cout << "Final error: " << critic.forward(nn.forward(testFeat), testLab) << endl;
-	
-	Tensor<> result = Tensor<>::flatten({ &nn.forward(testFeat) });
-	result.scale(max - min).shift(min);
-	result.resize(result.size(0), 1);
-	
-	File<>::saveArff(result, "pred.arff");
-	*/
 	
 	return 0;
 }
