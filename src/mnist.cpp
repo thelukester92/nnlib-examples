@@ -49,8 +49,9 @@ int main()
 		new Linear<>(outs), new TanH<>(),
 		new LogSoftMax<>()
 	);
-	NLL<> critic(nn);
-	auto optimizer = makeOptimizer<RMSProp>(nn, critic).learningRate(0.001);
+	NLL<> critic(nn.outputs());
+	RMSProp<> optimizer(nn, critic);
+	optimizer.learningRate(0.001);
 	
 	nn.batch(testFeat.size(0));
 	critic.batch(testLab.size(0));

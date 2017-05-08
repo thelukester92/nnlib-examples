@@ -6,8 +6,12 @@ using namespace nnlib;
 
 Tensor<> extrapolate(Sequencer<> &model, const Tensor<> &context, size_t length)
 {
+	size_t sequenceLength = model.sequenceLength();
+	size_t bats = model.batch();
+	
 	model.forget();
-	model.seqLen(1);
+	model.sequenceLength(1);
+	model.batch(1);
 	
 	for(size_t i = 0; i < context.size(0); ++i)
 	{
@@ -20,77 +24,94 @@ Tensor<> extrapolate(Sequencer<> &model, const Tensor<> &context, size_t length)
 		result.narrow(0, i).copy(model.forward(model.output()));
 	}
 	
-	return result.resize(result.size(0), 1);
+	model.sequenceLength(sequenceLength);
+	model.batch(bats);
+	
+	return result;
 }
 
 int main()
 {
+	// Metaparameters
+	
+	size_t sequenceLength = 50;
+	size_t bats = 1;
+	size_t epochs = 1000;
+	double validationPart = 0.33;
+	double learningRate = 0.01;
+	
+	// Bootstrap
+	
 	RandomEngine::seed(0);
+	cout << setprecision(5) << fixed;
 	
 	cout << "===== Training on Airline =====" << endl;
 	cout << "Setting up..." << endl;
 	
-	Tensor<double> series = File<>::loadArff("data/airline.arff");
+	// Data loading
+	
+	Tensor<> series = File<>::loadArff("data/airline.arff");
 	double min = series.min(), max = series.max();
 	series.normalize();
 	
-	size_t trainLength = 0.67 * series.size(0);
+	// Data splitting
+	
+	size_t trainLength = (1.0 - validationPart) * series.size(0);
 	size_t testLength = series.size(0) - trainLength + 1;
 	
-	Tensor<double> train = series.sub({ { 0, trainLength }, {} });
-	Tensor<double> test = series.sub({ { trainLength - 1, testLength }, {} });
+	Tensor<> train = series.narrow(0, 0, trainLength);
+	Tensor<> test = series.narrow(0, trainLength - 1, testLength);
 	
-	Tensor<double> trainFeat = train.sub({ { 0, trainLength - 1 }, {} });
-	Tensor<double> trainLab = train.sub({ { 1, trainLength - 1 }, {} });
+	Tensor<> trainFeat = train.narrow(0, 0, trainLength - 1);
+	Tensor<> trainLab = train.narrow(0, 1, trainLength - 1);
 	
-	Tensor<double> testFeat = test.sub({ { 0, testLength - 1 }, {} }).resize(testLength - 1, 1, 1);
-	Tensor<double> testLab = test.sub({ { 1, testLength - 1 }, {} }).resize(testLength - 1, 1, 1);
+	Tensor<> testFeat = test.narrow(0, 0, testLength - 1);
+	Tensor<> testLab = test.narrow(0, 1, testLength - 1);
 	
-	size_t seqLen = 10;
-	size_t bats = 10;
+	// Modeling
 	
 	Sequencer<> nn(
 		new Sequential<>(
-			new LSTM<>(1, 50),
-			new LSTM<>(50),
+			new LSTM<>(1, 20),
 			new Linear<>(1)
 		),
-		seqLen
+		sequenceLength
 	);
-	MSE<> critic(nn);
-	auto optimizer = makeOptimizer<SGD>(nn, critic).learningRate(0.1);
+	nn.batch(bats);
 	
-	nn.seqLen(testFeat.size(0));
-	nn.batch(1);
-	critic.inputs(nn.outputs());
-	cout << setprecision(5) << fixed;
-	cout << "Initial error: " << critic.forward(nn.forward(testFeat), testLab) << endl;
+	MSE<> critic(nn.outputs());
+	SGD<> optimizer(nn, critic);
+	optimizer.learningRate(learningRate);
+	
+	Tensor<> preds = extrapolate(nn, trainFeat.reshape(trainLength - 1, 1, 1), testLength);
+	cout << "Initial error: " << critic.forward(preds, test.reshape(testLength, 1, 1)) << endl;
+	
+	// Training
+	
+	SequenceBatcher<> batcher(trainFeat, trainLab, sequenceLength, bats);
 	
 	cout << "Training..." << endl;
-	
-	nn.seqLen(series.size(0) - 1);
-	nn.batch(1);
-	critic.inputs(nn.outputs());
-	
-	Tensor<> fromSeries = series.sub({ { 0, series.size(0) - 1 }, {} }).resize(series.size(0) - 1, 1, 1);
-	Tensor<> toSeries = series.sub({ { 1, series.size(0) - 1 }, {} }).resize(series.size(0) - 1, 1, 1);
-	
-	size_t epochs = 200;
 	for(size_t i = 0; i < epochs; ++i)
 	{
+		batcher.reset();
+		
 		nn.forget();
-		optimizer.step(fromSeries, toSeries);
-		optimizer.learningRate(optimizer.learningRate() * 0.999);
+		optimizer.step(batcher.features(), batcher.labels());
+		optimizer.learningRate(optimizer.learningRate() * (1.0 - 1e-6));
+		
 		Progress<>::display(i, epochs);
 	}
 	Progress<>::display(epochs, epochs, '\n');
-	cout << setprecision(5) << critic.forward(nn.forward(fromSeries), toSeries) << endl;
 	
-	Tensor<> preds = extrapolate(nn, series.narrow(0, 0, trainLength), testLength);
-	Tensor<> seriesAndPreds = Tensor<>::flatten({ &trainFeat, &preds })
-		.resize(series.size(0), 1)
-		.scale(max - min)
-		.shift(min);
+	preds = extrapolate(nn, trainFeat.reshape(trainLength - 1, 1, 1), testLength);
+	
+	cout << "Final error: " << critic.forward(preds, test.reshape(testLength, 1, 1)) << endl;
+	
+	Tensor<> seriesAndPreds(trainFeat.size(0) + preds.size(0), 3);
+	seriesAndPreds.fill(File<>::unknown);
+	seriesAndPreds.select(1, 0).narrow(0, 0, trainFeat.size(0)).copy(trainFeat).scale(max - min).shift(min);
+	seriesAndPreds.select(1, 1).narrow(0, trainFeat.size(0), testLab.size(0)).copy(testLab).scale(max - min).shift(min);
+	seriesAndPreds.select(1, 2).narrow(0, trainFeat.size(0), preds.size(0)).copy(preds).scale(max - min).shift(min);
 	
 	File<>::saveArff(seriesAndPreds, "pred.arff");
 	
