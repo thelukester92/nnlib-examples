@@ -30,23 +30,98 @@ Tensor<> extrapolate(Sequencer<> &model, const Tensor<> &context, size_t length)
 	return result;
 }
 
-int main()
+class Args
+{
+public:
+	Args(int argc, const char **argv) :
+		m_argc(argc),
+		m_index(0),
+		m_argv(argv)
+	{
+		// remove the name of the executable by default
+		popString();
+	}
+	
+	bool hasNext()
+	{
+		return m_index < m_argc;
+	}
+	
+	bool ifPop(const char *str)
+	{
+		NNAssert(hasNext(), "Attempted to pop from empty argument list!");
+		if(strcmp(str, m_argv[m_index]) == 0)
+		{
+			++m_index;
+			return true;
+		}
+		return false;
+	}
+	
+	const char *popString()
+	{
+		NNAssert(hasNext(), "Attempted to pop from empty argument list!");
+		return m_argv[m_index++];
+	}
+	
+	int popInt()
+	{
+		NNAssert(hasNext(), "Attempted to pop from empty argument list!");
+		return atoi(m_argv[m_index++]);
+	}
+	
+	double popDouble()
+	{
+		NNAssert(hasNext(), "Attempted to pop from empty argument list!");
+		return atof(m_argv[m_index++]);
+	}
+private:
+	int m_argc, m_index;
+	const char **m_argv;
+};
+
+int main(int argc, const char **argv)
 {
 	// Metaparameters
 	
-	size_t sequenceLength = 50;
-	size_t bats = 10;
-	size_t epochs = 1000;
+	size_t sequenceLength = 90;
+	size_t bats = 20;
+	size_t epochs = 200;
 	double validationPart = 0.33;
-	double learningRate = 0.01 / bats;
+	double learningRate = 0.01;
+	double learningRateDecay = 1.0 - 1e-3;
+	
+	Args args(argc, argv);
+	while(args.hasNext())
+	{
+		if(args.ifPop("-e"))
+		{
+			epochs = args.popInt();
+		}
+		else if(args.ifPop("-l"))
+		{
+			learningRate = args.popDouble();
+		}
+		else if(args.ifPop("-d"))
+		{
+			learningRateDecay = args.popDouble();
+		}
+		else
+		{
+			throw std::runtime_error("Unexpected arguments!");
+		}
+	}
 	
 	// Bootstrap
 	
+	cout << "===== Training on Airline =====" << endl;
+	cout << "epochs              = " << epochs << endl;
+	cout << "learning rate       = " << learningRate << endl;
+	cout << "learning rate decay = " << learningRateDecay << endl;
+	cout << "Setting up..." << endl;
+	
 	RandomEngine::seed(0);
 	cout << setprecision(5) << fixed;
-	
-	cout << "===== Training on Airline =====" << endl;
-	cout << "Setting up..." << endl;
 	
 	// Data loading
 	
@@ -72,7 +147,7 @@ int main()
 	
 	Sequencer<> nn(
 		new Sequential<>(
-			new LSTM<>(1, 20),
+			new LSTM<>(1, 10),
 			new Linear<>(1)
 		),
 		sequenceLength
@@ -80,83 +155,53 @@ int main()
 	nn.batch(bats);
 	
 	MSE<> critic(nn.outputs());
-	SGD<> optimizer(nn, critic);
+	RMSProp<> optimizer(nn, critic);
 	optimizer.learningRate(learningRate);
 	
 	Tensor<> preds = extrapolate(nn, trainFeat.reshape(trainLength - 1, 1, 1), testLength);
-	cout << "Initial error: " << critic.forward(preds, test.reshape(testLength, 1, 1)) << endl;
+	double minError = critic.forward(preds, test.reshape(testLength, 1, 1));
+	cout << "Initial error: " << minError << endl;
 	
 	// Training
 	
-	SequenceBatcher<> batcher(trainFeat, trainLab, sequenceLength, bats);
+	Tensor<> foo = series.narrow(0, 0, series.size() - 1);
+	Tensor<> bar = series.narrow(0, 1, series.size() - 1);
 	
-	// nn.batch(1);
-	// critic.inputs(nn.outputs());
+	// SequenceBatcher<> batcher(trainFeat, trainLab, sequenceLength, bats);
+	SequenceBatcher<> batcher(foo, bar, sequenceLength, bats);
 	
 	cout << "Training..." << endl;
 	for(size_t i = 0; i < epochs; ++i)
 	{
 		batcher.reset();
 		
-		// optimizer.step(batcher.features(), batcher.labels());
-		
-		/*
-		for(size_t k = 0; k < bats; ++k)
-		{
-			optimizer.step(batcher.features().narrow(1, k), batcher.features().narrow(1, k));
-		}
-		*/
-		
-		Tensor<> inps(nn.inputs(), true);
-		Tensor<> outs(nn.outputs(), true);
-		Tensor<> grads(optimizer.grads().shape(), true);
-		grads.fill(0);
-		
-		nn.batch(1);
-		critic.inputs(nn.outputs());
-		
-		for(size_t k = 0; k < bats; ++k)
-		{
-			optimizer.grads().fill(0);
-			nn.forward(batcher.features().narrow(1, k));
-			critic.backward(nn.output(), batcher.labels().narrow(1, k));
-			nn.backward(batcher.features().narrow(1, k), critic.inGrad());
-			grads.addVV(optimizer.grads());
-		}
-		
-		nn.batch(bats);
-		critic.inputs(nn.outputs());
-		
-		optimizer.grads().fill(0);
-		nn.forward(batcher.features());
-		critic.backward(nn.output(), batcher.labels());
-		nn.backward(batcher.features(), critic.inGrad());
-		
-		cout << setprecision(10);
-		cout << MSE<>(grads.shape()).forward(grads, optimizer.grads()) * grads.size() << endl;
-		return 0;
-		
-		/*
 		nn.forget();
 		optimizer.step(batcher.features(), batcher.labels());
-		optimizer.learningRate(optimizer.learningRate() * (1.0 - 1e-6));
-		*/
+		optimizer.learningRate(optimizer.learningRate() * learningRateDecay);
 		
 		Progress<>::display(i, epochs);
+		
+		preds = extrapolate(nn, trainFeat.reshape(trainLength - 1, 1, 1), testLength);
+		double err = critic.forward(preds, test.reshape(testLength, 1, 1));
+		cout << "\terr: " << err << "\tmin: " << minError << flush;
+		
+		if(err < minError)
+		{
+			minError = err;
+			
+			Tensor<> seriesAndPreds(trainFeat.size(0) + preds.size(0), 3);
+			seriesAndPreds.fill(File<>::unknown);
+			seriesAndPreds.select(1, 0).narrow(0, 0, trainFeat.size(0)).copy(trainFeat).scale(max - min).shift(min);
+			seriesAndPreds.select(1, 1).narrow(0, trainFeat.size(0), testLab.size(0)).copy(testLab).scale(max - min).shift(min);
+			seriesAndPreds.select(1, 2).narrow(0, trainFeat.size(0), preds.size(0)).copy(preds).scale(max - min).shift(min);
+			
+			File<>::saveArff(seriesAndPreds, "pred.arff");
+		}
 	}
 	Progress<>::display(epochs, epochs, '\n');
 	
 	preds = extrapolate(nn, trainFeat.reshape(trainLength - 1, 1, 1), testLength);
-	
 	cout << "Final error: " << critic.forward(preds, test.reshape(testLength, 1, 1)) << endl;
-	
-	Tensor<> seriesAndPreds(trainFeat.size(0) + preds.size(0), 3);
-	seriesAndPreds.fill(File<>::unknown);
-	seriesAndPreds.select(1, 0).narrow(0, 0, trainFeat.size(0)).copy(trainFeat).scale(max - min).shift(min);
-	seriesAndPreds.select(1, 1).narrow(0, trainFeat.size(0), testLab.size(0)).copy(testLab).scale(max - min).shift(min);
-	seriesAndPreds.select(1, 2).narrow(0, trainFeat.size(0), preds.size(0)).copy(preds).scale(max - min).shift(min);
-	
-	File<>::saveArff(seriesAndPreds, "pred.arff");
 	
 	return 0;
 }
