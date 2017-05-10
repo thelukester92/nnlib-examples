@@ -84,7 +84,7 @@ int main(int argc, const char **argv)
 {
 	// Metaparameters
 	
-	size_t sequenceLength = 90;
+	size_t sequenceLength = 150;
 	size_t bats = 20;
 	size_t epochs = 200;
 	double validationPart = 0.33;
@@ -125,7 +125,12 @@ int main(int argc, const char **argv)
 	
 	// Data loading
 	
-	Tensor<> series = File<>::loadArff("data/airline.arff");
+	// Tensor<> series = File<>::loadArff("data/airline.arff");
+	Tensor<> series(500);
+	for(size_t i = 0; i < series.size(0); ++i)
+		series(i) = sin(0.05 * i);
+	series.resize(series.size(0), 1);
+	
 	double min = series.min(), max = series.max();
 	series.normalize();
 	
@@ -155,7 +160,7 @@ int main(int argc, const char **argv)
 	nn.batch(bats);
 	
 	MSE<> critic(nn.outputs());
-	RMSProp<> optimizer(nn, critic);
+	Nadam<> optimizer(nn, critic);
 	optimizer.learningRate(learningRate);
 	
 	Tensor<> preds = extrapolate(nn, trainFeat.reshape(trainLength - 1, 1, 1), testLength);
