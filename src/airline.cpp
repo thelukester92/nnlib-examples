@@ -30,87 +30,20 @@ Tensor<> extrapolate(Sequencer<> &model, const Tensor<> &context, size_t length)
 	return result;
 }
 
-class Args
-{
-public:
-	Args(int argc, const char **argv) :
-		m_argc(argc),
-		m_index(0),
-		m_argv(argv)
-	{
-		// remove the name of the executable by default
-		popString();
-	}
-	
-	bool hasNext()
-	{
-		return m_index < m_argc;
-	}
-	
-	bool ifPop(const char *str)
-	{
-		NNAssert(hasNext(), "Attempted to pop from empty argument list!");
-		if(strcmp(str, m_argv[m_index]) == 0)
-		{
-			++m_index;
-			return true;
-		}
-		return false;
-	}
-	
-	const char *popString()
-	{
-		NNAssert(hasNext(), "Attempted to pop from empty argument list!");
-		return m_argv[m_index++];
-	}
-	
-	int popInt()
-	{
-		NNAssert(hasNext(), "Attempted to pop from empty argument list!");
-		return atoi(m_argv[m_index++]);
-	}
-	
-	double popDouble()
-	{
-		NNAssert(hasNext(), "Attempted to pop from empty argument list!");
-		return atof(m_argv[m_index++]);
-	}
-private:
-	int m_argc, m_index;
-	const char **m_argv;
-};
-
 int main(int argc, const char **argv)
 {
-	// Metaparameters
+	ArgsParser args;
+	args.addInt('e', "epochs");
+	args.addDouble('l', "learningRate");
+	args.addDouble('d', "learningRateDecay");
+	args.parse(argc, argv);
 	
-	size_t sequenceLength = 150;
-	size_t bats = 20;
-	size_t epochs = 200;
-	double validationPart = 0.33;
-	double learningRate = 0.01;
-	double learningRateDecay = 1.0 - 1e-3;
-	
-	Args args(argc, argv);
-	while(args.hasNext())
-	{
-		if(args.ifPop("-e"))
-		{
-			epochs = args.popInt();
-		}
-		else if(args.ifPop("-l"))
-		{
-			learningRate = args.popDouble();
-		}
-		else if(args.ifPop("-d"))
-		{
-			learningRateDecay = args.popDouble();
-		}
-		else
-		{
-			throw std::runtime_error("Unexpected arguments!");
-		}
-	}
+	size_t sequenceLength		= 150;
+	size_t bats					= 20;
+	size_t epochs				= args.getInt('e', 100);
+	double validationPart		= 0.33;
+	double learningRate			= args.getDouble('l', 0.01);
+	double learningRateDecay	= args.getDouble('d', 0.999);
 	
 	// Bootstrap
 	
