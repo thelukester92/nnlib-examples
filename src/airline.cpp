@@ -50,24 +50,25 @@ double getError(CriticSequencer<> &critic, const Tensor<> &preds, const Tensor<>
 int main(int argc, const char **argv)
 {
 	ArgsParser args;
-	args.addInt('e', "epochs");
-	args.addDouble('l', "learningRate");
-	args.addDouble('d', "learningRateDecay");
+	args.addInt('s', "sequenceLength", 150);
+	args.addInt('b', "batchSize", 20);
+	args.addInt('e', "epochs", 100);
+	args.addDouble('l', "learningRate", 0.01);
+	args.addDouble('d', "learningRateDecay", 0.999);
+	args.addDouble('v', "validationPart", 0.33);
 	args.parse(argc, argv);
 	
-	size_t sequenceLength		= 150;
-	size_t bats					= 20;
-	size_t epochs				= args.getInt('e', 100);
-	double validationPart		= 0.33;
-	double learningRate			= args.getDouble('l', 0.01);
-	double learningRateDecay	= args.getDouble('d', 0.999);
+	size_t sequenceLength		= args.getInt('s');
+	size_t bats					= args.getInt('b');
+	size_t epochs				= args.getInt('e');
+	double validationPart		= args.getDouble('v');
+	double learningRate			= args.getDouble('l');
+	double learningRateDecay	= args.getDouble('d');
 	
 	// Bootstrap
 	
 	cout << "===== Training on Airline =====" << endl;
-	cout << "epochs              = " << epochs << endl;
-	cout << "learning rate       = " << learningRate << endl;
-	cout << "learning rate decay = " << learningRateDecay << endl;
+	args.printOpts();
 	cout << "Setting up..." << endl;
 	
 	RandomEngine::seed(0);
@@ -122,8 +123,8 @@ int main(int argc, const char **argv)
 	Tensor<> foo = series.narrow(0, 0, series.size() - 1);
 	Tensor<> bar = series.narrow(0, 1, series.size() - 1);
 	
-	// SequenceBatcher<> batcher(trainFeat, trainLab, sequenceLength, bats);
-	SequenceBatcher<> batcher(foo, bar, sequenceLength, bats);
+	SequenceBatcher<> batcher(trainFeat, trainLab, sequenceLength, bats);
+	// SequenceBatcher<> batcher(foo, bar, sequenceLength, bats);
 	
 	cout << "Training..." << endl;
 	for(size_t i = 0; i < epochs; ++i)
