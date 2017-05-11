@@ -103,9 +103,6 @@ int main(int argc, const char **argv)
 	
 	// Training
 	
-	Tensor<> foo = series.narrow(0, 0, series.size() - 1);
-	Tensor<> bar = series.narrow(0, 1, series.size() - 1);
-	
 	SequenceBatcher<> batcher(trainFeat, trainLab, sequenceLength, bats);
 	
 	cout << "Training..." << endl;
