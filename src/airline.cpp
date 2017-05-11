@@ -58,9 +58,9 @@ int main(int argc, const char **argv)
 	args.addDouble('v', "validationPart", 0.33);
 	args.parse(argc, argv);
 	
-	size_t sequenceLength		= args.getInt('s');
-	size_t bats					= args.getInt('b');
-	size_t epochs				= args.getInt('e');
+	size_t sequenceLength		= std::max(args.getInt('s'), 1);
+	size_t bats					= std::max(args.getInt('b'), 1);
+	size_t epochs				= std::max(args.getInt('e'), 1);
 	double validationPart		= std::max(std::min(args.getDouble('v'), 0.1), 0.9);
 	double learningRate			= args.getDouble('l');
 	double learningRateDecay	= args.getDouble('d');
