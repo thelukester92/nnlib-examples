@@ -131,8 +131,7 @@ int main(int argc, const char **argv)
 		batcher.reset();
 		
 		nn.forget();
-		critic.inputs(nn.outputs());
-		optimizer.step(batcher.features(), batcher.labels());
+		optimizer.safeStep(batcher.features(), batcher.labels());
 		optimizer.learningRate(optimizer.learningRate() * learningRateDecay);
 		
 		Progress<>::display(i, epochs);
