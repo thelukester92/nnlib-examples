@@ -30,23 +30,6 @@ Tensor<> extrapolate(Sequencer<> &model, const Tensor<> &context, size_t length)
 	return result;
 }
 
-/// \todo make this a method inside module/critic (i.e. "safeForward" that auto-resizes like torch)
-double getError(CriticSequencer<> &critic, const Tensor<> &preds, const Tensor<> &targets)
-{
-	size_t sequenceLength = critic.sequenceLength();
-	size_t bats = critic.batch();
-	
-	critic.sequenceLength(preds.size());
-	critic.batch(1);
-	
-	double result = critic.forward(preds, targets);
-	
-	critic.sequenceLength(sequenceLength);
-	critic.batch(bats);
-	
-	return result;
-}
-
 int main(int argc, const char **argv)
 {
 	ArgsParser args;
@@ -61,7 +44,7 @@ int main(int argc, const char **argv)
 	size_t sequenceLength		= std::max(args.getInt('s'), 1);
 	size_t bats					= std::max(args.getInt('b'), 1);
 	size_t epochs				= std::max(args.getInt('e'), 1);
-	double validationPart		= std::max(std::min(args.getDouble('v'), 0.1), 0.9);
+	double validationPart		= std::min(std::max(args.getDouble('v'), 0.1), 0.9);
 	double learningRate			= args.getDouble('l');
 	double learningRateDecay	= args.getDouble('d');
 	
@@ -124,7 +107,6 @@ int main(int argc, const char **argv)
 	Tensor<> bar = series.narrow(0, 1, series.size() - 1);
 	
 	SequenceBatcher<> batcher(trainFeat, trainLab, sequenceLength, bats);
-	// SequenceBatcher<> batcher(foo, bar, sequenceLength, bats);
 	
 	cout << "Training..." << endl;
 	for(size_t i = 0; i < epochs; ++i)
@@ -157,7 +139,8 @@ int main(int argc, const char **argv)
 	Progress<>::display(epochs, epochs, '\n');
 	
 	preds = extrapolate(nn, trainFeat.reshape(trainLength - 1, 1, 1), testLength);
-	cout << "Final error: " << critic.safeForward(preds, test.reshape(testLength, 1, 1)) << endl;
+	critic.inputs(preds.shape());
+	cout << "Final error: " << critic.forward(preds, test.reshape(testLength, 1, 1)) << endl;
 	
 	return 0;
 }
