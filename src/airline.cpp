@@ -59,11 +59,14 @@ int main(int argc, const char **argv)
 	
 	// Data loading
 	
-	// Tensor<> series = File<>::loadArff("data/airline.arff");
+	Tensor<> series = File<>::loadArff("data/airline.arff");
+	
+	/*
 	Tensor<> series(500);
 	for(size_t i = 0; i < series.size(0); ++i)
 		series(i) = sin(0.05 * i);
 	series.resize(series.size(0), 1);
+	*/
 	
 	double min = series.min(), max = series.max();
 	series.normalize();
