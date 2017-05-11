@@ -114,7 +114,7 @@ int main(int argc, const char **argv)
 	optimizer.learningRate(learningRate);
 	
 	Tensor<> preds = extrapolate(nn, trainFeat.reshape(trainLength - 1, 1, 1), testLength);
-	double minError = getError(critic, preds, test.reshape(testLength, 1, 1));
+	double minError = critic.safeForward(preds, test.reshape(testLength, 1, 1));
 	cout << "Initial error: " << minError << endl;
 	
 	// Training
@@ -131,13 +131,14 @@ int main(int argc, const char **argv)
 		batcher.reset();
 		
 		nn.forget();
+		critic.inputs(nn.outputs());
 		optimizer.step(batcher.features(), batcher.labels());
 		optimizer.learningRate(optimizer.learningRate() * learningRateDecay);
 		
 		Progress<>::display(i, epochs);
 		
 		preds = extrapolate(nn, trainFeat.reshape(trainLength - 1, 1, 1), testLength);
-		double err = getError(critic, preds, test.reshape(testLength, 1, 1));
+		double err = critic.safeForward(preds, test.reshape(testLength, 1, 1));
 		cout << "\terr: " << err << "\tmin: " << minError << flush;
 		
 		if(err < minError)
@@ -156,7 +157,7 @@ int main(int argc, const char **argv)
 	Progress<>::display(epochs, epochs, '\n');
 	
 	preds = extrapolate(nn, trainFeat.reshape(trainLength - 1, 1, 1), testLength);
-	cout << "Final error: " << getError(critic, preds, test.reshape(testLength, 1, 1)) << endl;
+	cout << "Final error: " << critic.safeForward(preds, test.reshape(testLength, 1, 1)) << endl;
 	
 	return 0;
 }
