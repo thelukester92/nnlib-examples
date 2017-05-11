@@ -4,7 +4,7 @@
 using namespace std;
 using namespace nnlib;
 
-Tensor<> extrapolate(Sequencer<> &model, const Tensor<> &context, size_t length)
+Tensor<> extrapolate(Sequencer<> &model, const Tensor<> &context, const Tensor<> &future)
 {
 	size_t sequenceLength = model.sequenceLength();
 	size_t bats = model.batch();
@@ -18,10 +18,14 @@ Tensor<> extrapolate(Sequencer<> &model, const Tensor<> &context, size_t length)
 		model.forward(context.narrow(0, i));
 	}
 	
-	Tensor<> result(length, 1, 1);
-	for(size_t i = 0; i < length; ++i)
+	Tensor<> result(future.size(0), 1, 1);
+	for(size_t i = 0; i < future.size(0); ++i)
 	{
-		result.narrow(0, i).copy(model.forward(model.output()));
+		Tensor<> inp(context.size(2));
+		inp.view(2).copy(future.narrow(0, i).narrow(2, 0, 2));
+		inp.narrow(0, 2, context.size(2) - 2).copy(model.output());
+		
+		result.narrow(0, i).copy(model.forward(inp.view(1, 1, inp.size())));
 	}
 	
 	model.sequenceLength(sequenceLength);
@@ -37,15 +41,18 @@ int main(int argc, const char **argv)
 	args.addInt('b', "batchSize", 20);
 	args.addInt('e', "epochs", 100);
 	args.addInt('n', "hiddenSize", 100);
+	args.addInt('c', "seriesColumn", 0);
 	args.addDouble('l', "learningRate", 0.01);
 	args.addDouble('d', "learningRateDecay", 0.999);
 	args.addDouble('v', "validationPart", 0.33);
+	args.addString('f', "file", "data/airline.arff");
 	args.parse(argc, argv);
 	
 	size_t sequenceLength		= std::max(args.getInt('s'), 1);
 	size_t bats					= std::max(args.getInt('b'), 1);
 	size_t epochs				= std::max(args.getInt('e'), 1);
 	size_t hiddenSize			= std::max(args.getInt('n'), 1);
+	size_t seriesColumn			= std::max(args.getInt('c'), 0);
 	double validationPart		= std::min(std::max(args.getDouble('v'), 0.1), 0.9);
 	double learningRate			= args.getDouble('l');
 	double learningRateDecay	= args.getDouble('d');
@@ -61,7 +68,8 @@ int main(int argc, const char **argv)
 	
 	// Data loading
 	
-	Tensor<> series = File<>::loadArff("data/airline.arff");
+	Tensor<> series = File<>::loadArff(args.getString("file"));
+	seriesColumn = std::min(seriesColumn, series.size(1));
 	
 	/*
 	Tensor<> series(500);
@@ -70,8 +78,8 @@ int main(int argc, const char **argv)
 	series.resize(series.size(0), 1);
 	*/
 	
-	double min = series.min(), max = series.max();
-	series.normalize();
+	double min = series.narrow(1, seriesColumn).min(), max = series.narrow(1, seriesColumn).max();
+	series.narrow(1, seriesColumn).normalize();
 	
 	// Data splitting
 	
@@ -82,16 +90,16 @@ int main(int argc, const char **argv)
 	Tensor<> test = series.narrow(0, trainLength - 1, testLength);
 	
 	Tensor<> trainFeat = train.narrow(0, 0, trainLength - 1);
-	Tensor<> trainLab = train.narrow(0, 1, trainLength - 1);
+	Tensor<> trainLab = train.narrow(0, 1, trainLength - 1).narrow(1, seriesColumn);
 	
 	Tensor<> testFeat = test.narrow(0, 0, testLength - 1);
-	Tensor<> testLab = test.narrow(0, 1, testLength - 1);
+	Tensor<> testLab = test.narrow(0, 1, testLength - 1).narrow(1, seriesColumn);
 	
 	// Modeling
 	
 	Sequencer<> nn(
 		new Sequential<>(
-			new LSTM<>(1, hiddenSize),
+			new LSTM<>(series.size(1), hiddenSize),
 			new Linear<>(1)
 		),
 		sequenceLength
@@ -102,8 +110,8 @@ int main(int argc, const char **argv)
 	Nadam<> optimizer(nn, critic);
 	optimizer.learningRate(learningRate);
 	
-	Tensor<> preds = extrapolate(nn, trainFeat.reshape(trainLength - 1, 1, 1), testLength);
-	double minError = critic.safeForward(preds, test.reshape(testLength, 1, 1));
+	Tensor<> preds = extrapolate(nn, trainFeat.view(trainLength - 1, 1, trainFeat.size(1)), test.view(testLength, 1, testFeat.size(1)));
+	double minError = critic.safeForward(preds, test.narrow(1, seriesColumn).view(testLength, 1, 1));
 	cout << "Initial error: " << minError << endl;
 	
 	// Training
@@ -121,9 +129,8 @@ int main(int argc, const char **argv)
 		
 		Progress<>::display(i, epochs);
 		
-		preds = extrapolate(nn, trainFeat.reshape(trainLength - 1, 1, 1), testLength);
-		double err = critic.safeForward(preds, test.reshape(testLength, 1, 1));
-		cout << "\terr: " << err << "\tmin: " << minError << flush;
+		preds = extrapolate(nn, trainFeat.view(trainLength - 1, 1, trainFeat.size(1)), test.view(testLength, 1, testFeat.size(1)));
+		double err = critic.safeForward(preds, test.narrow(1, seriesColumn).view(testLength, 1, 1));
 		
 		if(err < minError)
 		{
@@ -131,18 +138,20 @@ int main(int argc, const char **argv)
 			
 			Tensor<> seriesAndPreds(trainFeat.size(0) + preds.size(0), 3);
 			seriesAndPreds.fill(File<>::unknown);
-			seriesAndPreds.select(1, 0).narrow(0, 0, trainFeat.size(0)).copy(trainFeat).scale(max - min).shift(min);
+			seriesAndPreds.select(1, 0).narrow(0, 0, trainFeat.size(0)).copy(trainFeat.narrow(1, seriesColumn)).scale(max - min).shift(min);
 			seriesAndPreds.select(1, 1).narrow(0, trainFeat.size(0), testLab.size(0)).copy(testLab).scale(max - min).shift(min);
 			seriesAndPreds.select(1, 2).narrow(0, trainFeat.size(0), preds.size(0)).copy(preds).scale(max - min).shift(min);
 			
 			File<>::saveArff(seriesAndPreds, "pred.arff");
 		}
+		
+		cout << "\terr: " << err << "\tmin: " << minError << flush;
 	}
 	Progress<>::display(epochs, epochs, '\n');
 	
-	preds = extrapolate(nn, trainFeat.reshape(trainLength - 1, 1, 1), testLength);
+	preds = extrapolate(nn, trainFeat.view(trainLength - 1, 1, trainFeat.size(1)), test.view(testLength, 1, testFeat.size(1)));
 	critic.inputs(preds.shape());
-	cout << "Final error: " << critic.forward(preds, test.reshape(testLength, 1, 1)) << endl;
+	cout << "Final error: " << critic.safeForward(preds, test.narrow(1, seriesColumn).view(testLength, 1, 1)) << endl;
 	
 	return 0;
 }
