@@ -36,6 +36,7 @@ int main(int argc, const char **argv)
 	args.addInt('s', "sequenceLength", 150);
 	args.addInt('b', "batchSize", 20);
 	args.addInt('e', "epochs", 100);
+	args.addInt('n', "hiddenSize", 100);
 	args.addDouble('l', "learningRate", 0.01);
 	args.addDouble('d', "learningRateDecay", 0.999);
 	args.addDouble('v', "validationPart", 0.33);
@@ -44,6 +45,7 @@ int main(int argc, const char **argv)
 	size_t sequenceLength		= std::max(args.getInt('s'), 1);
 	size_t bats					= std::max(args.getInt('b'), 1);
 	size_t epochs				= std::max(args.getInt('e'), 1);
+	size_t hiddenSize			= std::max(args.getInt('n'), 1);
 	double validationPart		= std::min(std::max(args.getDouble('v'), 0.1), 0.9);
 	double learningRate			= args.getDouble('l');
 	double learningRateDecay	= args.getDouble('d');
@@ -89,7 +91,7 @@ int main(int argc, const char **argv)
 	
 	Sequencer<> nn(
 		new Sequential<>(
-			new LSTM<>(1, 10),
+			new LSTM<>(1, hiddenSize),
 			new Linear<>(1)
 		),
 		sequenceLength
