@@ -61,7 +61,7 @@ int main(int argc, const char **argv)
 	size_t sequenceLength		= args.getInt('s');
 	size_t bats					= args.getInt('b');
 	size_t epochs				= args.getInt('e');
-	double validationPart		= args.getDouble('v');
+	double validationPart		= std::max(std::min(args.getDouble('v'), 0.1), 0.9);
 	double learningRate			= args.getDouble('l');
 	double learningRateDecay	= args.getDouble('d');
 	
