@@ -56,6 +56,7 @@ int main(int argc, const char **argv)
 	args.addDouble('l', "learningRate", 0.01);
 	args.addDouble('d', "learningRateDecay", 0.999);
 	args.addDouble('v', "validationPart", 0.33);
+	args.addFlag('a', "aFlag");
 	args.parse(argc, argv);
 	
 	size_t sequenceLength		= args.getInt('s');
