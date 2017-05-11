@@ -30,6 +30,23 @@ Tensor<> extrapolate(Sequencer<> &model, const Tensor<> &context, size_t length)
 	return result;
 }
 
+/// \todo make this a method inside module/critic (i.e. "safeForward" that auto-resizes like torch)
+double getError(CriticSequencer<> &critic, const Tensor<> &preds, const Tensor<> &targets)
+{
+	size_t sequenceLength = critic.sequenceLength();
+	size_t bats = critic.batch();
+	
+	critic.sequenceLength(preds.size());
+	critic.batch(1);
+	
+	double result = critic.forward(preds, targets);
+	
+	critic.sequenceLength(sequenceLength);
+	critic.batch(bats);
+	
+	return result;
+}
+
 int main(int argc, const char **argv)
 {
 	ArgsParser args;
@@ -92,12 +109,12 @@ int main(int argc, const char **argv)
 	);
 	nn.batch(bats);
 	
-	MSE<> critic(nn.outputs());
+	CriticSequencer<> critic(new MSE<>(nn.module().outputs()), sequenceLength);
 	Nadam<> optimizer(nn, critic);
 	optimizer.learningRate(learningRate);
 	
 	Tensor<> preds = extrapolate(nn, trainFeat.reshape(trainLength - 1, 1, 1), testLength);
-	double minError = critic.forward(preds, test.reshape(testLength, 1, 1));
+	double minError = getError(critic, preds, test.reshape(testLength, 1, 1));
 	cout << "Initial error: " << minError << endl;
 	
 	// Training
@@ -120,7 +137,7 @@ int main(int argc, const char **argv)
 		Progress<>::display(i, epochs);
 		
 		preds = extrapolate(nn, trainFeat.reshape(trainLength - 1, 1, 1), testLength);
-		double err = critic.forward(preds, test.reshape(testLength, 1, 1));
+		double err = getError(critic, preds, test.reshape(testLength, 1, 1));
 		cout << "\terr: " << err << "\tmin: " << minError << flush;
 		
 		if(err < minError)
@@ -139,7 +156,7 @@ int main(int argc, const char **argv)
 	Progress<>::display(epochs, epochs, '\n');
 	
 	preds = extrapolate(nn, trainFeat.reshape(trainLength - 1, 1, 1), testLength);
-	cout << "Final error: " << critic.forward(preds, test.reshape(testLength, 1, 1)) << endl;
+	cout << "Final error: " << getError(critic, preds, test.reshape(testLength, 1, 1)) << endl;
 	
 	return 0;
 }
