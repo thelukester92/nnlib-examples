@@ -96,6 +96,8 @@ int main(int argc, const char **argv)
 	Sequencer<> nn(
 		new Sequential<>(
 			new LSTM<>(series.size(1), hiddenSize),
+			new LSTM<>(50),
+			new LSTM<>(20),
 			new Linear<>(1)
 		),
 		sequenceLength
@@ -128,17 +130,17 @@ int main(int argc, const char **argv)
 		preds = extrapolate(nn, trainFeat.view(trainLength - 1, 1, trainFeat.size(1)), test.view(testLength, 1, testFeat.size(1)));
 		double err = critic.safeForward(preds, test.narrow(1, seriesColumn).view(testLength, 1, 1));
 		
+		Tensor<> seriesAndPreds(trainFeat.size(0) + preds.size(0), 3);
+		seriesAndPreds.fill(File<>::unknown);
+		seriesAndPreds.select(1, 0).narrow(0, 0, trainFeat.size(0)).copy(trainFeat.narrow(1, seriesColumn)).scale(max - min).shift(min);
+		seriesAndPreds.select(1, 1).narrow(0, trainFeat.size(0), testLab.size(0)).copy(testLab).scale(max - min).shift(min);
+		seriesAndPreds.select(1, 2).narrow(0, trainFeat.size(0), preds.size(0)).copy(preds).scale(max - min).shift(min);
+		
+		File<>::saveArff(seriesAndPreds, "pred-last.arff");
 		if(err < minError)
 		{
 			minError = err;
-			
-			Tensor<> seriesAndPreds(trainFeat.size(0) + preds.size(0), 3);
-			seriesAndPreds.fill(File<>::unknown);
-			seriesAndPreds.select(1, 0).narrow(0, 0, trainFeat.size(0)).copy(trainFeat.narrow(1, seriesColumn)).scale(max - min).shift(min);
-			seriesAndPreds.select(1, 1).narrow(0, trainFeat.size(0), testLab.size(0)).copy(testLab).scale(max - min).shift(min);
-			seriesAndPreds.select(1, 2).narrow(0, trainFeat.size(0), preds.size(0)).copy(preds).scale(max - min).shift(min);
-			
-			File<>::saveArff(seriesAndPreds, "pred.arff");
+			File<>::saveArff(seriesAndPreds, "pred-best.arff");
 		}
 		
 		cout << "\terr: " << err << "\tmin: " << minError << flush;
