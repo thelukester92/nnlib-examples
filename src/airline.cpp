@@ -22,8 +22,11 @@ Tensor<> extrapolate(Sequencer<> &model, const Tensor<> &context, const Tensor<>
 	for(size_t i = 0; i < future.size(0); ++i)
 	{
 		Tensor<> inp(context.size(2));
-		inp.view(2).copy(future.narrow(0, i).narrow(2, 0, 2));
-		inp.narrow(0, 2, context.size(2) - 2).copy(model.output());
+		if(context.size(2) > 1)
+		{
+			inp.view(context.size(2) - 1).copy(future.narrow(0, i).narrow(2, 0, context.size(2)));
+		}
+		inp.narrow(0, context.size(2) - 1, 1).copy(model.output());
 		
 		result.narrow(0, i).copy(model.forward(inp.view(1, 1, inp.size())));
 	}
@@ -37,7 +40,7 @@ Tensor<> extrapolate(Sequencer<> &model, const Tensor<> &context, const Tensor<>
 int main(int argc, const char **argv)
 {
 	ArgsParser args;
-	args.addInt('s', "sequenceLength", 150);
+	args.addInt('s', "sequenceLength", 50);
 	args.addInt('b', "batchSize", 20);
 	args.addInt('e', "epochs", 100);
 	args.addInt('n', "hiddenSize", 100);
@@ -70,13 +73,6 @@ int main(int argc, const char **argv)
 	
 	Tensor<> series = File<>::loadArff(args.getString("file"));
 	seriesColumn = std::min(seriesColumn, series.size(1));
-	
-	/*
-	Tensor<> series(500);
-	for(size_t i = 0; i < series.size(0); ++i)
-		series(i) = sin(0.05 * i);
-	series.resize(series.size(0), 1);
-	*/
 	
 	double min = series.narrow(1, seriesColumn).min(), max = series.narrow(1, seriesColumn).max();
 	series.narrow(1, seriesColumn).normalize();
