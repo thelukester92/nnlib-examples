@@ -6,6 +6,8 @@ using namespace nnlib;
 
 size_t countMisclassifications(Module<> &model, const Tensor<> &feat, const Tensor<> &lab)
 {
+	size_t bats = model.batch();
+	
 	model.batch(feat.size(0));
 	model.forward(feat);
 	
@@ -21,6 +23,8 @@ size_t countMisclassifications(Module<> &model, const Tensor<> &feat, const Tens
 		if(max != (size_t) lab(i, 0))
 			++misclassifications;
 	}
+	
+	model.batch(bats);
 	
 	return misclassifications;
 }
@@ -45,8 +49,11 @@ int main()
 	
 	Sequential<> nn(
 		new Linear<>(trainFeat.size(1), 300), new TanH<>(),
+		new BatchNorm<>(),
 		new Linear<>(100), new TanH<>(),
+		new BatchNorm<>(),
 		new Linear<>(outs), new TanH<>(),
+		new BatchNorm<>(),
 		new LogSoftMax<>()
 	);
 	NLL<> critic(nn.outputs());
@@ -63,7 +70,7 @@ int main()
 	nn.batch(batcher.batch());
 	critic.batch(batcher.batch());
 	
-	size_t epochs = 10;
+	size_t epochs = 2;
 	size_t k = 0, tot = epochs * batcher.batches();
 	for(size_t i = 0; i < epochs; ++i)
 	{
