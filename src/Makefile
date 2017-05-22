@@ -1,5 +1,5 @@
 BIN:=../bin
-CFLAGS:=-Wall -std=c++11
+CFLAGS:=-Wall -std=c++11 -DACCELERATE_BLAS
 LFLAGS:=
 CXX:=g++
 UNAME:=$(shell uname -s)
