@@ -24,7 +24,7 @@ Tensor<> extrapolate(Sequencer<> &model, const Tensor<> &context, const Tensor<>
 		Tensor<> inp(context.size(2));
 		if(context.size(2) > 1)
 		{
-			inp.view(context.size(2) - 1).copy(future.narrow(0, i).narrow(2, 0, context.size(2)));
+			inp.view(context.size(2) - 1).copy(future.narrow(0, i).narrow(2, 0, context.size(2) - 1));
 		}
 		inp.narrow(0, context.size(2) - 1, 1).copy(model.output());
 		
@@ -130,7 +130,7 @@ int main(int argc, const char **argv)
 		batcher.reset();
 		
 		nn.forget();
-		optimizer.step(batcher.features(), batcher.labels());
+		optimizer.safeStep(batcher.features(), batcher.labels());
 		optimizer.learningRate(optimizer.learningRate() * learningRateDecay);
 		
 		Progress<>::display(i, epochs);
@@ -143,6 +143,9 @@ int main(int argc, const char **argv)
 		if(printError)
 		{
 			double err = critic.safeForward(preds, test.narrow(1, seriesColumn).view(testLength, 1, 1));
+			
+			if(err != err)
+				throw std::runtime_error("nan occurred!");
 			
 			if(err < minError)
 			{
