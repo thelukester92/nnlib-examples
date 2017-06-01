@@ -16,15 +16,15 @@ else
 endif
 
 CFLAGS_OPT:=$(CFLAGS) -O3 -DOPTIMIZE
-CFLAGS_DBG:=$(CFLAGS) -g -DDEBUG
+CFLAGS_DBG:=$(CFLAGS) -g
 
 LFLAGS_OPT:=$(LFLAGS)
 LFLAGS_DBG:=$(LFLAGS)
 
 DBG_OUT:=$(OUT)_dbg
 
-opt: airline mnist
-dbg: airline_dbg mnist_dbg
+opt: airline benchmark mnist
+dbg: airline_dbg benchmark_dbg mnist_dbg
 
 clean:
 	rm -rf $(BIN)/*
@@ -35,6 +35,14 @@ $(BIN)/airline: airline.cpp
 
 airline_dbg: $(BIN) $(BIN)/airline_dbg
 $(BIN)/airline_dbg: airline.cpp
+	$(CXX) $< $(CFLAGS_DBG) $(LFLAGS_DBG) -o $@
+
+benchmark: $(BIN) $(BIN)/benchmark
+$(BIN)/benchmark: benchmark.cpp
+	$(CXX) $< $(CFLAGS_OPT) $(LFLAGS_OPT) -o $@
+
+benchmark_dbg: $(BIN) $(BIN)/benchmark_dbg
+$(BIN)/benchmark_dbg: benchmark.cpp
 	$(CXX) $< $(CFLAGS_DBG) $(LFLAGS_DBG) -o $@
 
 mnist: $(BIN) $(BIN)/mnist
@@ -48,4 +56,4 @@ $(BIN)/mnist_dbg: mnist.cpp
 $(BIN):
 	mkdir -p $@
 
-.PHONY: opt dbg clean airline airline_dbg mnist mnist_dbg
+.PHONY: opt dbg clean airline airline_dbg benchmark benchmark_dbg mnist mnist_dbg

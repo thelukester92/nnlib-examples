@@ -70,7 +70,7 @@ int main()
 	nn.batch(batcher.batch());
 	critic.batch(batcher.batch());
 	
-	size_t epochs = 2;
+	size_t epochs = 10;
 	size_t k = 0, tot = epochs * batcher.batches();
 	for(size_t i = 0; i < epochs; ++i)
 	{

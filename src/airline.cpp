@@ -97,9 +97,9 @@ int main(int argc, const char **argv)
 	
 	Sequencer<> nn(
 		new Sequential<>(
-			new LSTM<>(series.size(1), hiddenSize),
-			new LSTM<>(50),
-			new LSTM<>(20),
+			&(new LSTM<>(series.size(1), hiddenSize))->gradClip(10),
+			&(new LSTM<>(50))->gradClip(10),
+			&(new LSTM<>(20))->gradClip(10),
 			new Linear<>(1)
 		),
 		sequenceLength
@@ -130,6 +130,7 @@ int main(int argc, const char **argv)
 		batcher.reset();
 		
 		nn.forget();
+		
 		optimizer.safeStep(batcher.features(), batcher.labels());
 		optimizer.learningRate(optimizer.learningRate() * learningRateDecay);
 		
@@ -139,13 +140,16 @@ int main(int argc, const char **argv)
 		seriesAndPreds.select(1, 2).narrow(0, trainFeat.size(0), preds.size(0)).copy(preds).scale(max - min).add(min);
 		
 		File<>::saveArff(seriesAndPreds, "pred-last.arff");
+		Archive::toFile("model.bin") << nn;
 		
 		if(printError)
 		{
 			double err = critic.safeForward(preds, test.narrow(1, seriesColumn).view(testLength, 1, 1));
 			
 			if(err != err)
+			{
 				throw std::runtime_error("nan occurred!");
+			}
 			
 			if(err < minError)
 			{
