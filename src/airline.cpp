@@ -4,6 +4,9 @@
 using namespace std;
 using namespace nnlib;
 
+// this command works best:
+// ./bin/airline -f ../../CaseStack/data/kh_kings-hawaiian-roll.arff -c 2 -e 1000 -s 400 -l 0.01 -d 1
+
 Tensor<> extrapolate(Sequencer<> &model, const Tensor<> &context, const Tensor<> &future)
 {
 	size_t sequenceLength = model.sequenceLength();
@@ -49,6 +52,8 @@ int main(int argc, const char **argv)
 	args.addDouble('d', "learningRateDecay", 0.999);
 	args.addDouble('v', "validationPart", 0.33);
 	args.addString('f', "file", "data/airline.arff");
+	args.addString('m', "modelOut", "model.bin");
+	args.addString('o', "predictionOut", "pred-last.arff");
 	args.addFlag('p', "printError");
 	args.parse(argc, argv);
 	
@@ -139,24 +144,15 @@ int main(int argc, const char **argv)
 		preds = extrapolate(nn, trainFeat.view(trainLength - 1, 1, trainFeat.size(1)), test.view(testLength, 1, testFeat.size(1)));
 		seriesAndPreds.select(1, 2).narrow(0, trainFeat.size(0), preds.size(0)).copy(preds).scale(max - min).add(min);
 		
-		File<>::saveArff(seriesAndPreds, "pred-last.arff");
-		Archive::toFile("model.bin") << nn;
+		File<>::saveArff(seriesAndPreds, args.getString("predictionOut"));
+		Archive::toFile(args.getString("modelOut")) << nn;
 		
 		if(printError)
 		{
 			double err = critic.safeForward(preds, test.narrow(1, seriesColumn).view(testLength, 1, 1));
-			
-			if(err != err)
-			{
-				throw std::runtime_error("nan occurred!");
-			}
-			
+			NNHardAssert(err == err, "nan occurred!");
 			if(err < minError)
-			{
 				minError = err;
-				File<>::saveArff(seriesAndPreds, "pred-best.arff");
-			}
-			
 			cout << "\terr: " << err << "\tmin: " << minError << flush;
 		}
 	}
