@@ -57,14 +57,17 @@ int main()
 	Tensor<double> testFeat = test.sub({ {}, { 0, test.size(1) - 1 } }).scale(1.0 / 255.0);
 	Tensor<double> testLab = test.sub({ {}, { test.size(1) - 1 } });
 	
-	Sequential<> nn(
-		new Linear<>(trainFeat.size(1), 300), new TanH<>(),
-		new BatchNorm<>(),
-		new Linear<>(100), new TanH<>(),
-		new BatchNorm<>(),
-		new Linear<>(outs), new TanH<>(),
-		new BatchNorm<>(),
-		new LogSoftMax<>()
+	DropConnect<> nn(
+		new Sequential<>(
+			new Linear<>(trainFeat.size(1), 300), new TanH<>(),
+			new BatchNorm<>(),
+			new Linear<>(100), new TanH<>(),
+			new BatchNorm<>(),
+			new Linear<>(outs), new TanH<>(),
+			new BatchNorm<>(),
+			new LogSoftMax<>()
+		),
+		0.2
 	);
 	NLL<> critic(nn.outputs());
 	RMSProp<> optimizer(nn, critic);
