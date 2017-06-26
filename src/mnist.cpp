@@ -1,5 +1,6 @@
 #include <iostream>
 #include <iomanip>
+#include <fstream>
 #include <nnlib.h>
 using namespace std;
 using namespace nnlib;
@@ -16,16 +17,13 @@ size_t countMisclassifications(Module<> &model, const Tensor<> &feat, const Tens
 	{
 		size_t max = 0;
 		for(size_t j = 1; j < model.output().size(1); ++j)
-		{
 			if(model.output()(i, j) > model.output()(i, max))
 				max = j;
-		}
 		if(max != (size_t) lab(i, 0))
 			++misclassifications;
 	}
 	
 	model.batch(bats);
-	
 	return misclassifications;
 }
 
@@ -36,10 +34,22 @@ int main()
 	cout << "===== Training on MNIST =====" << endl;
 	cout << "Setting up..." << endl;
 	
-	Relation rel;
-	Tensor<double> train = File<>::loadArff("data/mnist.train.arff", &rel);
-	Tensor<double> test = File<>::loadArff("data/mnist.test.arff");
-	size_t outs = rel.attrVals(rel.size() - 1).size();
+	Tensor<> train, test;
+	ArffSerializer::Relation rel;
+	
+	{
+		ifstream fin("data/mnist.train.arff");
+		rel = ArffSerializer::read(train, fin);
+		fin.close();
+	}
+	
+	{
+		ifstream fin("data/mnist.test.arff");
+		ArffSerializer::read(test, fin);
+		fin.close();
+	}
+	
+	size_t outs = rel.attribute(rel.attributes() - 1).values();
 	
 	Tensor<double> trainFeat = train.sub({ {}, { 0, train.size(1) - 1 } }).scale(1.0 / 255.0);
 	Tensor<double> trainLab = train.sub({ {}, { train.size(1) - 1 } });
@@ -77,12 +87,12 @@ int main()
 		batcher.reset();
 		do
 		{
-			Progress<>::display(k++, tot);
+			Progress::display(k++, tot);
 			optimizer.step(batcher.features(), batcher.labels());
 		}
 		while(batcher.next());
 	}
-	Progress<>::display(tot, tot, '\n');
+	Progress::display(tot, tot, '\n');
 	
 	nn.batch(testFeat.size(0));
 	critic.batch(testLab.size(0));
