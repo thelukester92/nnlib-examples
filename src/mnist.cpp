@@ -59,19 +59,16 @@ int main()
 	
 	DropConnect<> nn(
 		new Sequential<>(
-			new Linear<>(trainFeat.size(1), 300), new TanH<>(),
-			new BatchNorm<>(),
-			new Linear<>(100), new TanH<>(),
-			new BatchNorm<>(),
-			new Linear<>(outs), new TanH<>(),
-			new BatchNorm<>(),
+			new Linear<>(trainFeat.size(1), 300), new BatchNorm<>(), new TanH<>(),
+			new Linear<>(100), new BatchNorm<>(), new TanH<>(),
+			new Linear<>(outs), new BatchNorm<>(), new TanH<>(),
 			new LogSoftMax<>()
 		),
 		0.2
 	);
 	NLL<> critic(nn.outputs());
 	RMSProp<> optimizer(nn, critic);
-	optimizer.learningRate(0.001);
+	optimizer.learningRate(0.01);
 	
 	nn.batch(testFeat.size(0));
 	critic.batch(testLab.size(0));
@@ -83,7 +80,7 @@ int main()
 	nn.batch(batcher.batch());
 	critic.batch(batcher.batch());
 	
-	size_t epochs = 10;
+	size_t epochs = 5;
 	size_t k = 0, tot = epochs * batcher.batches();
 	for(size_t i = 0; i < epochs; ++i)
 	{
@@ -97,6 +94,7 @@ int main()
 	}
 	Progress::display(tot, tot, '\n');
 	
+	nn.training(false);
 	nn.batch(testFeat.size(0));
 	critic.batch(testLab.size(0));
 	cout << setprecision(5) << fixed;
