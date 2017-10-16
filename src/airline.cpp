@@ -4,6 +4,17 @@
 using namespace std;
 using namespace nnlib;
 
+/*
+nnlib:
+0e0ba1855afba8bf44ed38758ec3896031d9acf9
+
+nnlib-examples:
+cfb75e85b2792d3290defaca417270cb22891c17
+
+command:
+./bin/airline -f ../../CaseStack/data/kh_kings-hawaiian-roll.arff -c 2 -e 1000 -s 400 -l 0.01 -d 1
+*/
+
 Tensor<> extrapolate(Sequencer<> &model, const Tensor<> &context, const Tensor<> &future)
 {
 	size_t sequenceLength = model.sequenceLength();
@@ -24,7 +35,7 @@ Tensor<> extrapolate(Sequencer<> &model, const Tensor<> &context, const Tensor<>
 		Tensor<> inp(context.size(2));
 		if(context.size(2) > 1)
 		{
-			inp.view(context.size(2) - 1).copy(future.narrow(0, i).narrow(2, 0, context.size(2)));
+			inp.view(context.size(2) - 1).copy(future.narrow(0, i));
 		}
 		inp.narrow(0, context.size(2) - 1, 1).copy(model.output());
 		
@@ -85,6 +96,8 @@ int main(int argc, const char **argv)
 	Tensor<> train = series.narrow(0, 0, trainLength);
 	Tensor<> test = series.narrow(0, trainLength - 1, testLength);
 	
+	Tensor<> future = test.narrow(1, 0, test.size(1) - 1).reshape(testLength, 1, test.size(1) - 1);
+	
 	Tensor<> trainFeat = train.narrow(0, 0, trainLength - 1);
 	Tensor<> trainLab = train.narrow(0, 1, trainLength - 1).narrow(1, seriesColumn);
 	
@@ -108,7 +121,7 @@ int main(int argc, const char **argv)
 	Nadam<> optimizer(nn, critic);
 	optimizer.learningRate(learningRate);
 	
-	Tensor<> preds = extrapolate(nn, trainFeat.view(trainLength - 1, 1, trainFeat.size(1)), test.view(testLength, 1, testFeat.size(1)));
+	Tensor<> preds = extrapolate(nn, trainFeat.view(trainLength - 1, 1, trainFeat.size(1)), future);
 	double minError = critic.safeForward(preds, test.narrow(1, seriesColumn).view(testLength, 1, 1));
 	cout << "Initial error: " << minError << endl;
 	
@@ -127,7 +140,7 @@ int main(int argc, const char **argv)
 		
 		Progress<>::display(i, epochs);
 		
-		preds = extrapolate(nn, trainFeat.view(trainLength - 1, 1, trainFeat.size(1)), test.view(testLength, 1, testFeat.size(1)));
+		preds = extrapolate(nn, trainFeat.view(trainLength - 1, 1, trainFeat.size(1)), future);
 		double err = critic.safeForward(preds, test.narrow(1, seriesColumn).view(testLength, 1, 1));
 		
 		Tensor<> seriesAndPreds(trainFeat.size(0) + preds.size(0), 3);
@@ -147,7 +160,7 @@ int main(int argc, const char **argv)
 	}
 	Progress<>::display(epochs, epochs, '\n');
 	
-	preds = extrapolate(nn, trainFeat.view(trainLength - 1, 1, trainFeat.size(1)), test.view(testLength, 1, testFeat.size(1)));
+	preds = extrapolate(nn, trainFeat.view(trainLength - 1, 1, trainFeat.size(1)), future);
 	critic.inputs(preds.shape());
 	cout << "Final error: " << critic.safeForward(preds, test.narrow(1, seriesColumn).view(testLength, 1, 1)) << endl;
 	
