@@ -1,4 +1,4 @@
 bin/
-*.arff
+*.csv
 .DS_Store
 results/

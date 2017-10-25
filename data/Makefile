@@ -1,7 +1,7 @@
 GZIP_FILES=$(wildcard *.gz)
-ARFF_FILES=$(GZIP_FILES:%.arff.gz=%.arff)
+CSV_FILES=$(GZIP_FILES:%.csv.gz=%.csv)
 
-decompress: $(ARFF_FILES)
+decompress: $(CSV_FILES)
 
-%.arff : %.arff.gz
+%.csv : %.csv.gz
 	gzip -dc $< > $@

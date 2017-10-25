@@ -1,30 +1,47 @@
 #include <iostream>
-#include <iomanip>
-#include <fstream>
-#include <nnlib.h>
-using namespace std;
+#include <nnlib/critics/nll.hpp>
+#include <nnlib/nn/logsoftmax.hpp>
+#include <nnlib/nn/sequential.hpp>
+#include <nnlib/nn/linear.hpp>
+#include <nnlib/nn/tanh.hpp>
+#include <nnlib/opt/nadam.hpp>
+#include <nnlib/serialization/csvserializer.hpp>
+#include <nnlib/util/batcher.hpp>
+#include <nnlib/util/progress.hpp>
 using namespace nnlib;
+using namespace std;
 
-size_t countMisclassifications(Module<> &model, const Tensor<> &feat, const Tensor<> &lab)
+void load(const string &fname, Tensor<> &feat, Tensor<> &lab)
 {
-	size_t bats = model.batch();
+	Serialized rows = CSVSerializer::readFile(fname);
 	
-	model.batch(feat.size(0));
-	model.forward(feat);
+	feat.resize(rows.size(), rows.get(0)->size() - 1);
+	lab.resize(rows.size(), 1);
 	
-	size_t misclassifications = 0;
+	size_t i = 0;
+	for(Serialized *row : rows.as<SerializedArray>())
+	{
+		for(size_t j = 0; j < row->size() - 1; ++j)
+			feat(i, j) = row->get<double>(j) / 255.0;
+		lab(i, 0) = row->get<double>(row->size() - 1);
+		++i;
+	}
+}
+
+size_t countMisclassifications(Module<> &nn, Tensor<> &feat, Tensor<> &lab)
+{
+	size_t miss = 0;
 	for(size_t i = 0; i < feat.size(0); ++i)
 	{
-		size_t max = 0;
-		for(size_t j = 1; j < model.output().size(1); ++j)
-			if(model.output()(i, j) > model.output()(i, max))
-				max = j;
-		if(max != (size_t) lab(i, 0))
-			++misclassifications;
+		nn.forward(feat.narrow(0, i));
+		size_t pred = 0;
+		for(size_t j = 1; j < nn.output().size(1); ++j)
+			if(nn.output()(0, j) > nn.output()(0, pred))
+				pred = j;
+		if(pred != (size_t) lab(i, 0))
+			++miss;
 	}
-	
-	model.batch(bats);
-	return misclassifications;
+	return miss;
 }
 
 int main()
@@ -32,74 +49,39 @@ int main()
 	RandomEngine::seed(0);
 	
 	cout << "===== Training on MNIST =====" << endl;
-	cout << "Setting up..." << endl;
 	
-	Tensor<> train, test;
-	ArffSerializer::Relation rel;
+	cout << "Loading data..." << flush;
+	Tensor<> feat, lab, tFeat, tLab;
+	load("data/mnist.train.csv", feat, lab);
+	load("data/mnist.test.csv", tFeat, tLab);
+	cout << " Done!" << endl;
 	
-	{
-		ifstream fin("data/mnist.train.arff");
-		rel = ArffSerializer::read(train, fin);
-		fin.close();
-	}
-	
-	{
-		ifstream fin("data/mnist.test.arff");
-		ArffSerializer::read(test, fin);
-		fin.close();
-	}
-	
-	size_t outs = rel.attribute(rel.attributes() - 1).values();
-	
-	Tensor<double> trainFeat = train.sub({ {}, { 0, train.size(1) - 1 } }).scale(1.0 / 255.0);
-	Tensor<double> trainLab = train.sub({ {}, { train.size(1) - 1 } });
-	
-	Tensor<double> testFeat = test.sub({ {}, { 0, test.size(1) - 1 } }).scale(1.0 / 255.0);
-	Tensor<double> testLab = test.sub({ {}, { test.size(1) - 1 } });
-	
-	DropConnect<> nn(
-		new Sequential<>(
-			new Linear<>(trainFeat.size(1), 300), new BatchNorm<>(), new TanH<>(),
-			new Linear<>(100), new BatchNorm<>(), new TanH<>(),
-			new Linear<>(outs), new BatchNorm<>(), new TanH<>(),
-			new LogSoftMax<>()
-		),
-		0.2
+	Sequential<> nn(
+		new Linear<>(784, 300), new TanH<>(),
+		new Linear<>(300, 100), new TanH<>(),
+		new Linear<>(100, 10), new LogSoftMax<>()
 	);
-	NLL<> critic(nn.outputs());
-	RMSProp<> optimizer(nn, critic);
-	optimizer.learningRate(0.01);
+	NLL<> critic;
+	Nadam<> optimizer(nn, critic);
+	optimizer.learningRate(1e-3);
 	
-	nn.batch(testFeat.size(0));
-	critic.batch(testLab.size(0));
-	cout << "Initial error: " << critic.forward(nn.forward(testFeat), testLab) << endl;
-	cout << "Initial miss:  " << countMisclassifications(nn, testFeat, testLab) << endl;
-	cout << "Training..." << endl;
-	
-	Batcher<> batcher(trainFeat, trainLab, 100);
-	nn.batch(batcher.batch());
-	critic.batch(batcher.batch());
-	
+	Batcher<> batcher(feat, lab, 20);
+	size_t batches = batcher.batches();
 	size_t epochs = 5;
-	size_t k = 0, tot = epochs * batcher.batches();
+	
 	for(size_t i = 0; i < epochs; ++i)
 	{
+		size_t j = 0;
 		batcher.reset();
 		do
 		{
-			Progress::display(k++, tot);
 			optimizer.step(batcher.features(), batcher.labels());
+			Progress::display(i * batches + j++ + 1, epochs * batches);
 		}
 		while(batcher.next());
 	}
-	Progress::display(tot, tot, '\n');
 	
-	nn.training(false);
-	nn.batch(testFeat.size(0));
-	critic.batch(testLab.size(0));
-	cout << setprecision(5) << fixed;
-	cout << "Final error: " << critic.forward(nn.forward(testFeat), testLab) << endl;
-	cout << "Final miss:  " << countMisclassifications(nn, testFeat, testLab) << endl;
+	cout << "Final misclassifications: " << countMisclassifications(nn, tFeat, tLab) << endl;
 	
 	return 0;
 }
