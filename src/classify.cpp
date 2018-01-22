@@ -49,7 +49,7 @@ int main(int argc, const char **argv)
     load(train, feat, lab);
     load(test, tFeat, tLab);
     size_t inps = feat.size(1);
-    size_t outs = math::max(lab);
+    size_t outs = math::max(lab) + 1;
     clog << " Done! Mapping " << inps << " -> " << outs << "!" << endl;
 
     Sequential<T> nn(
