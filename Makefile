@@ -14,11 +14,9 @@ override APPS     := $(APPS:%=bin/%) $(APPS:%=bin/%_dbg)
 
 all: $(APPS)
 clean:
-	@$(MAKE) -C data clean
 	rm -rf bin obj
 
 bin/%: obj/%.o
-	@$(MAKE) -C data $(basename $(notdir $@))
 	@mkdir -p $(dir $@)
 	$(CXX) $< $(OPTFLAGS) $(LDFLAGS) -l$(NNLIB) -MMD -o $@
 
