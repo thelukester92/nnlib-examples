@@ -9,30 +9,29 @@ override OPTFLAGS := $(CXXFLAGS) -O3
 override DBGFLAGS := $(CXXFLAGS) -O0 -g
 override DEPFILES := $(shell find src -name "*.cpp")
 override DEPFILES := $(DEPFILES:src/%.cpp=obj/%.d) $(DEPFILES:src/%.cpp=obj/dbg/%.d)
-override APPS     := csvtobin
+override APPS     := classify
 override APPS     := $(APPS:%=bin/%) $(APPS:%=bin/%_dbg)
 
 all: $(APPS)
 clean:
-	$(MAKE) -C data clean
+	@$(MAKE) -C data clean
 	rm -rf bin obj
 
 bin/%: obj/%.o
-	$(MAKE) -C data $(basename $(notdir $@))
-	mkdir -p $(dir $@)
+	@$(MAKE) -C data $(basename $(notdir $@))
+	@mkdir -p $(dir $@)
 	$(CXX) $< $(OPTFLAGS) $(LDFLAGS) -l$(NNLIB) -MMD -o $@
 
 bin/%_dbg: obj/dbg/%.o
-	$(MAKE) -C data $(basename $(notdir $@))
-	mkdir -p $(dir $@)
+	@mkdir -p $(dir $@)
 	$(CXX) $< $(DBGFLAGS) $(LDFLAGS) -l$(NNLIB)_dbg -MMD -o $@
 
 obj/%.o: src/%.cpp
-	mkdir -p $(dir $@)
+	@mkdir -p $(dir $@)
 	$(CXX) $< $(OPTFLAGS) -c -MMD -o $@
 
 obj/dbg/%.o: src/%.cpp
-	mkdir -p $(dir $@)
+	@mkdir -p $(dir $@)
 	$(CXX) $< $(DBGFLAGS) -c -MMD -o $@
 
 .PHONY: all opt dbg clean

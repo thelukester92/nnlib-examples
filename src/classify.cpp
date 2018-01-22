@@ -7,8 +7,10 @@
 #include <nnlib/nn/tanh.hpp>
 #include <nnlib/opt/nadam.hpp>
 #include <nnlib/serialization/fileserializer.hpp>
+#include <nnlib/util/args.hpp>
 #include <nnlib/util/batcher.hpp>
 #include <nnlib/util/progress.hpp>
+#include <unordered_set>
 using namespace nnlib;
 using namespace std;
 using T = double;
@@ -20,33 +22,50 @@ void load(const string &fname, Tensor<T> &feat, Tensor<T> &lab)
     feat = feat.narrow(1, 0, feat.size(1) - 1) / 255.0;
 }
 
-int main()
+int main(int argc, const char **argv)
 {
-    RandomEngine::sharedEngine().seed(0);
+    ArgsParser args;
+    args.addInt('b', "batch", 20);
+    args.addInt('e', "epochs", 5);
+    args.addDouble('l', "learningRate", 1e-3);
+    args.addInt('s', "seed", -1);
+    args.addString("train", "data/mnist.train.bin");
+    args.addString("test", "data/mnist.test.bin");
+    args.parse(argc, argv);
+    args.printOpts();
 
-    cout << "===== Training on MNIST =====" << endl;
+    size_t batch   = args.getInt("batch");
+    size_t epochs  = args.getInt("epochs");
+    double lr      = args.getDouble("learningRate");
+    int seed       = args.getInt("seed");
+    string train   = args.getString("train");
+    string test    = args.getString("test");
 
-    cout << "Loading data..." << flush;
+    if(seed >= 0)
+        RandomEngine::sharedEngine().seed(seed);
+
+    clog << "Loading data..." << flush;
     Tensor<T> feat, lab, tFeat, tLab;
-    load("data/mnist.train.bin", feat, lab);
-    load("data/mnist.test.bin", tFeat, tLab);
-    cout << " Done!" << endl;
+    load(train, feat, lab);
+    load(test, tFeat, tLab);
+    size_t inps = feat.size(1);
+    size_t outs = math::max(lab);
+    clog << " Done! Mapping " << inps << " -> " << outs << "!" << endl;
 
     Sequential<T> nn(
-        new Linear<T>(784, 300), new TanH<T>(),
+        new Linear<T>(inps, 300), new TanH<T>(),
         new Linear<T>(300, 100), new TanH<T>(),
-        new Linear<T>(100, 10), new LogSoftMax<T>()
+        new Linear<T>(100, outs), new LogSoftMax<T>()
     );
 
     NLL<T> *critic = new NLL<T>();
     Nadam<T> optimizer(nn, critic);
-    optimizer.learningRate(1e-3);
+    optimizer.learningRate(lr);
 
-    Batcher<T> batcher(feat, lab, 20);
+    Batcher<T> batcher(feat, lab, batch);
     size_t batches = batcher.batches();
-    size_t epochs = 5;
 
-    Progress p(epochs * batches);
+    Progress p(epochs * batches, clog);
     p.display(0);
 
     for(size_t i = 0; i < epochs; ++i)
