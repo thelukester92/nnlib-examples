@@ -22,7 +22,7 @@ using T = double;
 void load(const std::string &infile, double validationPart, size_t &seriesColumn, Tensor<T> &feat, Tensor<T> &lab, Tensor<T> &tFeat, Tensor<T> &tLab, T &min, T &max)
 {
     Tensor<T> series = Tensor<T>(FileSerializer::read(infile));
-    seriesColumn = std::max(seriesColumn, series.size(1));
+    seriesColumn = std::min(seriesColumn, series.size(1));
     min = math::min(series.narrow(1, seriesColumn));
     max = math::max(series.narrow(1, seriesColumn));
     normalize(series.narrow(1, seriesColumn));
