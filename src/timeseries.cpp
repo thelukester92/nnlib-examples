@@ -19,13 +19,12 @@ using namespace nnlib;
 using namespace nnlib::math;
 using T = double;
 
-void load(const std::string &infile, double validationPart, size_t &seriesColumn, Tensor<T> &feat, Tensor<T> &lab, Tensor<T> &tFeat, Tensor<T> &tLab, T &min, T &max)
+void load(const std::string &infile, double validationPart, Tensor<T> &feat, Tensor<T> &lab, Tensor<T> &tFeat, Tensor<T> &tLab, T &min, T &max)
 {
     Tensor<T> series = Tensor<T>(FileSerializer::read(infile));
-    seriesColumn = std::min(seriesColumn, series.size(1));
-    min = math::min(series.narrow(1, seriesColumn));
-    max = math::max(series.narrow(1, seriesColumn));
-    normalize(series.narrow(1, seriesColumn));
+    min = math::min(series.narrow(1, 0));
+    max = math::max(series.narrow(1, 0));
+    normalize(series.narrow(1, 0));
 
     size_t trainLength = (1.0 - validationPart) * series.size(0);
     size_t testLength = series.size(0) - trainLength + 1;
@@ -34,33 +33,24 @@ void load(const std::string &infile, double validationPart, size_t &seriesColumn
     Tensor<T> test = series.narrow(0, trainLength - 1, testLength);
 
     feat = train.narrow(0, 0, trainLength - 1);
-    lab = train.narrow(0, 1, trainLength - 1).narrow(1, seriesColumn);
+    lab = train.narrow(0, 1, trainLength - 1).narrow(1, 0);
     tFeat = test.narrow(0, 0, testLength - 1);
-    tLab = test.narrow(0, 1, testLength - 1).narrow(1, seriesColumn);
+    tLab = test.narrow(0, 1, testLength - 1).narrow(1, 0);
 }
 
-void extrapolate(Sequencer<T> &model, const Tensor<T> &context, const Tensor<T> &future, Tensor<T> &preds)
+void extrapolate(Sequencer<T> &model, const Tensor<T> &context, Tensor<T> &preds)
 {
     model.forget();
-    model.forward(context);
-
-    preds.resize(future.size(0), 1, 1);
-    for(size_t i = 0; i < future.size(0); ++i)
-    {
-        Tensor<T> inp(context.size(2));
-        if(context.size(2) > 1)
-            inp.view(context.size(2) - 1).copy(future.narrow(0, i));
-        inp.narrow(0, context.size(2) - 1, 1).copy(model.output());
-        preds.narrow(0, i).copy(model.forward(inp.view(1, 1, inp.size())));
-    }
+    for(size_t i = 0; i < context.size(0); ++i)
+        model.forward(context.narrow(0, i));
+    for(size_t i = 0; i < preds.size(0); ++i)
+        preds(0, 0, 0) = model.forward(model.output())(0, 0, 0);
 }
 
 int main(int argc, const char **argv)
 {
     ArgsParser args;
     args.addInt('b', "batchSize", 20);
-    args.addInt('c', "seriesColumn", 0);
-    args.addDouble('d', "learningRateDecay", 0.999);
     args.addInt('e', "epochs", 100);
     args.addString('i', "infile", "data/airline.bin");
     args.addDouble('l', "learningRate", 0.01);
@@ -73,11 +63,9 @@ int main(int argc, const char **argv)
     args.printOpts();
 
     size_t bats           = args.getInt('b');
-    size_t seriesColumn   = args.getInt('c');
     size_t epochs         = args.getInt('e');
     size_t hiddenSize     = args.getInt('n');
     size_t sequenceLength = args.getInt('s');
-    T learningRateDecay   = args.getDouble('d');
     T learningRate        = args.getDouble('l');
     T validationPart      = args.getDouble('v');
     string infile         = args.getString("infile");
@@ -88,12 +76,10 @@ int main(int argc, const char **argv)
 
     Tensor<T> feat, lab, tFeat, tLab;
     T min, max;
-    load(infile, validationPart, seriesColumn, feat, lab, tFeat, tLab, min, max);
+    load(infile, validationPart, feat, lab, tFeat, tLab, min, max);
 
-    Tensor<T> feat3D  = feat.view(feat.size(0), 1, feat.size(1));
-    Tensor<T> lab3D   = lab.view(lab.size(0), 1, lab.size(1));
-    Tensor<T> tFeat3D = tFeat.view(tFeat.size(0), 1, tFeat.size(1));
-    Tensor<T> tLab3D  = tLab.view(tLab.size(0), 1, tLab.size(1));
+    Tensor<T> feat3D = feat.view(feat.size(0), 1, feat.size(1));
+    Tensor<T> tLab3D = tLab.view(tLab.size(0), 1, tLab.size(1));
 
     Sequencer<T> nn(
         new Sequential<T>(
@@ -108,8 +94,8 @@ int main(int argc, const char **argv)
     Nadam<T> optimizer(nn, new CriticSequencer<T>(new MSE<T>(false)));
     optimizer.learningRate(learningRate);
 
-    Tensor<T> preds;
-    extrapolate(nn, feat3D, tFeat3D, preds);
+    Tensor<T> preds(tFeat.size(0), 1, 1);
+    extrapolate(nn, feat3D, preds);
 
     T minErr = optimizer.critic().forward(preds, tLab3D), err;
     clog << "Initial error: " << minErr << endl;
@@ -124,19 +110,15 @@ int main(int argc, const char **argv)
         nn.forget();
 
         optimizer.step(batcher.features(), batcher.labels());
-        optimizer.learningRate(optimizer.learningRate() * learningRateDecay);
 
-        p.display(i + 1);
-
-        extrapolate(nn, feat3D, tFeat3D, preds);
+        extrapolate(nn, feat3D, preds);
         err = optimizer.critic().forward(preds, tLab3D);
         if(err < minErr)
             minErr = err;
+
+        p.display(i + 1);
         clog << "\terr: " << err << "\tmin: " << minErr << flush;
     }
-
-    extrapolate(nn, feat3D, tFeat3D, preds);
-    clog << "Final error: " << optimizer.critic().forward(preds, tLab3D) << endl;
 
     return 0;
 }
