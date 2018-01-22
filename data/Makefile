@@ -1,5 +1,5 @@
 all: classify
-classify: mnist.train.csv mnist.test.csv
+classify: mnist.train.bin mnist.test.bin
 clean:
 	rm -rf *.bin
 
