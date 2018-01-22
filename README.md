@@ -5,10 +5,10 @@ This repository is a collection of examples of how to use [nnlib](https://github
 
 # Examples
 
-To build all examples in optimized mode, run `make` in the `src` folder.
-To build all examples in debug mode, run `make dbg`.
-To build a specific example in optimized mode, include the example name after `make`.
-To build a specific example in debug mode, include the example name followed by `_dbg` after `make`.
-All examples compile to an executable with the same name as the make target.
+To build all examples, simply run `make`.
+To build a specific test, use `make bin/[test]` for optimized or `make bin/[test]_dbg` for debugging.
+These tests are set up so that they can be used with data other than the data provided.
+The tests currently available are...
 
-* `mnist` - train a classifier on the MNIST data set.
+* `classify` - train a classifier; by default, it uses the MNIST dataset.
+* `timeseries` - train a RNN to extrapolate a time series; by default, it uses the Airline dataset.
