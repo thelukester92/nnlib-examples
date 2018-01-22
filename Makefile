@@ -9,7 +9,7 @@ override OPTFLAGS := $(CXXFLAGS) -O3
 override DBGFLAGS := $(CXXFLAGS) -O0 -g
 override DEPFILES := $(shell find src -name "*.cpp")
 override DEPFILES := $(DEPFILES:src/%.cpp=obj/%.d) $(DEPFILES:src/%.cpp=obj/dbg/%.d)
-override APPS     := classify
+override APPS     := classify timeseries
 override APPS     := $(APPS:%=bin/%) $(APPS:%=bin/%_dbg)
 
 all: $(APPS)
