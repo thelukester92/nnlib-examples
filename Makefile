@@ -1,59 +1,40 @@
-BIN:=bin
-CFLAGS:=-Wall -std=c++11 -DACCELERATE_BLAS
-LFLAGS:=
-CXX:=g++
+# all   - make all examples
+# clean - remove build artifacts
 
-GNU_VERSION:=$(shell $(CXX) --version 2>/dev/null | grep ^g++ | sed 's/^.* //g')
-ifneq ($(GNU_VERSION),)
-	CFLAGS+=-flax-vector-conversions
-endif
+NNLIB    := nnlib
+CXXFLAGS := -Wall
 
-UNAME:=$(shell uname -s)
-ifeq ($(UNAME),Darwin)
-	LFLAGS+=-framework Accelerate
-else
-	LFLAGS+=-L/usr/local/lib -lopenblas -lpthread
-endif
+override CXXFLAGS += -std=c++11
+override OPTFLAGS := $(CXXFLAGS) -O3
+override DBGFLAGS := $(CXXFLAGS) -O0 -g
+override DEPFILES := $(shell find src -name "*.cpp")
+override DEPFILES := $(DEPFILES:src/%.cpp=obj/%.d) $(DEPFILES:src/%.cpp=obj/dbg/%.d)
+override APPS     := csvtobin
+override APPS     := $(APPS:%=bin/%) $(APPS:%=bin/%_dbg)
 
-CFLAGS_OPT:=$(CFLAGS) -O3 -DOPTIMIZE
-CFLAGS_DBG:=$(CFLAGS) -g
-
-LFLAGS_OPT:=$(LFLAGS)
-LFLAGS_DBG:=$(LFLAGS)
-
-DBG_OUT:=$(OUT)_dbg
-
-opt: airline benchmark mnist
-dbg: airline_dbg benchmark_dbg mnist_dbg
-
+all: $(APPS)
 clean:
-	rm -rf $(BIN)/*
+	$(MAKE) -C data clean
+	rm -rf bin obj
 
-airline: $(BIN) $(BIN)/airline
-$(BIN)/airline: src/airline.cpp
-	$(CXX) $< $(CFLAGS_OPT) $(LFLAGS_OPT) -o $@
+bin/%: obj/%.o
+	$(MAKE) -C data $(basename $(notdir $@))
+	mkdir -p $(dir $@)
+	$(CXX) $< $(OPTFLAGS) $(LDFLAGS) -l$(NNLIB) -MMD -o $@
 
-airline_dbg: $(BIN) $(BIN)/airline_dbg
-$(BIN)/airline_dbg: src/airline.cpp
-	$(CXX) $< $(CFLAGS_DBG) $(LFLAGS_DBG) -o $@
+bin/%_dbg: obj/dbg/%.o
+	$(MAKE) -C data $(basename $(notdir $@))
+	mkdir -p $(dir $@)
+	$(CXX) $< $(DBGFLAGS) $(LDFLAGS) -l$(NNLIB)_dbg -MMD -o $@
 
-benchmark: $(BIN) $(BIN)/benchmark
-$(BIN)/benchmark: src/benchmark.cpp
-	$(CXX) $< $(CFLAGS_OPT) $(LFLAGS_OPT) -o $@
+obj/%.o: src/%.cpp
+	mkdir -p $(dir $@)
+	$(CXX) $< $(OPTFLAGS) -c -MMD -o $@
 
-benchmark_dbg: $(BIN) $(BIN)/benchmark_dbg
-$(BIN)/benchmark_dbg: src/benchmark.cpp
-	$(CXX) $< $(CFLAGS_DBG) $(LFLAGS_DBG) -o $@
+obj/dbg/%.o: src/%.cpp
+	mkdir -p $(dir $@)
+	$(CXX) $< $(DBGFLAGS) -c -MMD -o $@
 
-mnist: $(BIN) $(BIN)/mnist
-$(BIN)/mnist: src/mnist.cpp
-	$(CXX) $< $(CFLAGS_OPT) $(LFLAGS_OPT) -o $@
+.PHONY: all opt dbg clean
 
-mnist_dbg: $(BIN) $(BIN)/mnist_dbg
-$(BIN)/mnist_dbg: src/mnist.cpp
-	$(CXX) $< $(CFLAGS_DBG) $(LFLAGS_DBG) -o $@
-
-$(BIN):
-	mkdir -p $@
-
-.PHONY: opt dbg clean airline airline_dbg benchmark benchmark_dbg mnist mnist_dbg
+-include $(DEPFILES)

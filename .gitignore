@@ -1,4 +1,4 @@
 bin
 obj
-*.csv
+*.bin
 .DS_Store

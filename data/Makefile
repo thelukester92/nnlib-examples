@@ -1,7 +1,9 @@
-GZIP_FILES=$(wildcard *.gz)
-CSV_FILES=$(GZIP_FILES:%.csv.gz=%.csv)
+all: classify
+classify: mnist.train.csv mnist.test.csv
+clean:
+	rm -rf *.bin
 
-decompress: $(CSV_FILES)
-
-%.csv : %.csv.gz
+%.bin : %.bin.gz
 	gzip -dc $< > $@
+
+.PHONY: all classify
